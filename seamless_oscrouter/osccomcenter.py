@@ -1,8 +1,8 @@
-from rendererclass import Renderer, ViewClient
-import str_keys_conventions as skc
+from seamless_oscrouter.rendererclass import Renderer, ViewClient
+import seamless_oscrouter.str_keys_conventions as skc
 from oscpy.server import OSCThreadServer
 from functools import partial
-from soundobjectclass import SoundObject
+from seamless_oscrouter.soundobjectclass import SoundObject
 import ipaddress
 
 

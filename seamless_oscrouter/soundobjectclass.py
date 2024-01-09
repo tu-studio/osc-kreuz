@@ -1,6 +1,6 @@
 import numpy as np
-import str_keys_conventions as skc
-import conversionsTools as ct
+import seamless_oscrouter.str_keys_conventions as skc
+import seamless_oscrouter.conversionsTools as ct
 from functools import partial
 from time import time
 

@@ -1,8 +1,8 @@
 # import renderer_config as reconf
-from soundobjectclass import SoundObject
-import str_keys_conventions as skc
-from str_keys_conventions import renderClass as renderclasstype
-import conversionsTools as ct
+from seamless_oscrouter.soundobjectclass import SoundObject
+import seamless_oscrouter.str_keys_conventions as skc
+from seamless_oscrouter.str_keys_conventions import renderClass as renderclasstype
+import seamless_oscrouter.conversionsTools as ct
 from oscpy.client import OSCClient
 # import oscpy.client as oscsock
 import time
