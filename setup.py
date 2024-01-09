@@ -7,6 +7,6 @@ setup(
     install_requires=["numpy", "oscpy"],
     entry_points="""
     [console_scripts]
-    oscrouter=seamless_oscrouter.oscrouter:main
+    seamless-oscrouter=seamless_oscrouter.oscrouter:main
     """
 )

@@ -72,7 +72,7 @@ def getConfigurationFromFile(path: str) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description='OSC Message Processor and Router')
-    parser.add_argument('--config', default='oscRouterConfig.txt', help='path to configfile', type=str)
+    parser.add_argument('--config', default='/usr/local/etc/seamless-core/oscrouter/oscRouterConfig.txt', help='path to configfile', type=str)
     parser.add_argument('--oscdebug', default='', help='ip and port for debug messages, e.g. "130.149.23.46:55112"', type=str)
     parser.add_argument('-v', '--verbose', action='count', default=0, help=' increase verbosity level.')
     args = parser.parse_args()
