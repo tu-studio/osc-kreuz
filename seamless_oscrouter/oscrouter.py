@@ -9,131 +9,131 @@ import seamless_oscrouter.rendererclass as rendererclass
 import seamless_oscrouter.osccomcenter as osccomcenter
 
 from functools import partial
+from pathlib import Path
 
 from oscpy.server import OSCThreadServer
-
+import click
 import signal
 import argparse
+import yaml
+import logging
+
+logFormat = "%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]: %(message)s"
+timeFormat = "%Y-%m-%d %H:%M:%S"
+logging.basicConfig(format=logFormat, datefmt=timeFormat, level=logging.INFO)
+log = logging.getLogger("main")
 
 
-#region pre init attributes
-
-def getConfigurationFromFile(path: str) -> dict:
-    configd = dict()
-
-    configfile = open(path, 'r')
-    config = configfile.read()
-    configfile.close()
-    blocks = config.split('***')
-
-    for block in blocks:
-
-        lines = block.split('\n')
-
-        while '' in lines:
-            lines.remove('')
-        if not lines:
-            break
-
-        type = lines[0].split()
-
-        if type[0] in ['globalconfig']:
-            configd[type[0]] = {}
-            subdict = configd[type[0]]
-        elif type[0] in ['audiorouter']:
-            if not 'audiorouter' in configd.keys():
-                configd[type[0]] = []
-            subdict = {}
-            configd['audiorouter'].append(subdict)
-        elif type[0] in ['audiorouterWFS']:
-            if not 'audiorouterWFS' in configd.keys():
-                configd[type[0]] = []
-            subdict = {}
-            configd['audiorouterWFS'].append(subdict)
-
-        else:
-            if not type[0] in configd.keys():
-                configd[type[0]] = {}
-
-            configd[type[0]][type[1]] = {}
-            subdict = configd[type[0]][type[1]]
-
-        for line in lines[1:]:
-            pair = line.split()
-            key = pair[0]
-            value = ct.convertedValue(pair[1])
-            subdict[key] = value
-
-            #configd[type[0]][type[1]] = subdict
-
-    return configd
+default_config_file_path = "seamless-core/oscrouter/oscRouterConfig.yml"
 
 
+def debug_prints(globalconfig, extendedOscInput, verbose):
+    log.debug("max number of sources is set to", str(globalconfig["number_sources"]))
+    log.debug(
+        "number of rendering units is", str(globalconfig["numberofrenderengines"])
+    )
+    if "index_ambi" in globalconfig.keys():
+        log.debug("ambisonics index:", globalconfig["index_ambi"])
+    if "index_wfs" in globalconfig.keys():
+        log.debug("wfs index:", globalconfig["index_wfs"])
+    if "index_reverb" in globalconfig.keys():
+        log.debug("reverb index:", globalconfig["index_reverb"])
 
-def main():
-    parser = argparse.ArgumentParser(description='OSC Message Processor and Router')
-    parser.add_argument('--config', default='/usr/local/etc/seamless-core/oscrouter/oscRouterConfig.txt', help='path to configfile', type=str)
-    parser.add_argument('--oscdebug', default='', help='ip and port for debug messages, e.g. "130.149.23.46:55112"', type=str)
-    parser.add_argument('-v', '--verbose', action='count', default=0, help=' increase verbosity level.')
-    args = parser.parse_args()
+    log.debug("UI listenport:", globalconfig[skc.inputport_ui])
+    log.debug("DATA listenport (for automation):", globalconfig[skc.inputport_data])
+    log.debug(
+        "port for settings, ping and client subscription is:",
+        globalconfig[skc.inputport_settings],
+    )
+    if extendedOscInput:
+        log.debug("extended osc-string listening activated")
+    else:
+        log.debug("only basic osc-strings will be accepted")
 
-    osccomcenter.setVerbosity(args.verbose)
-    # osccomcenter.verbosity = args.verbose
-    # rendererclass.verbosity = args.verbose
+    log.debug("max gain is", globalconfig[skc.max_gain])
 
-    configpath = args.config
-    # configpath = 'oscRouterConfig.txt'
+    if Renderer.debugCopy:
+        log.debug("Osc-Messages will be copied to somewhere")
+    else:
+        log.debug("No Debug client configured")
 
-    s_oscDebug = args.oscdebug
+    log.debug("Verbosity Level is", verbose)
+    if verbose == 1:
+        log.debug("outgoing osc will be printed in console")
+    elif verbose > 1:
+        log.debug("incoming and outgoing osc will be printed in console")
 
-    if s_oscDebug:
-        oscDebugParams = s_oscDebug.split(':')
+
+@click.command(help="OSC Message Processor and Router")
+@click.option(
+    "-c",
+    "--config",
+    "config_path",
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True, path_type=Path),
+    help="path to configfile",
+)
+@click.option(
+    "--oscdebug",
+    help='ip and port for debug messages, e.g. "130.149.23.46:55112"',
+    type=click.STRING,
+)
+@click.option("-v", "--verbose", count=True, help="increase verbosity level.")
+def main(config_path, oscdebug, verbose):
+    osccomcenter.setVerbosity(verbose)
+    if verbose > 0:
+        log.setLevel(logging.DEBUG)
+
+    # get Config Path:
+    if config_path is None:
+        # check different paths for a config file, with the highest one taking precedence
+        for possible_config_path in [
+            Path.home() / ".config" / default_config_file_path,
+            Path("/etc") / default_config_file_path,
+            Path("/usr/local/etc") / default_config_file_path,
+        ]:
+            if possible_config_path.exists():
+                config_path = possible_config_path
+                break
+
+        if config_path is None:
+            log.warning("Could not find config file, falling back to default config!")
+            config_path = Path(__file__).parent.parent / "oscRouterConfig.yml"
+
+    # read config file
+    with open(config_path) as f:
+        config = yaml.load(f, Loader=yaml.Loader)
+
+    # setup debug osc client
+    if oscdebug:
+        oscDebugParams = oscdebug.split(":")
         debugIp = oscDebugParams[0]
         debugPort = int(oscDebugParams[1])
         Renderer.createDebugClient(debugIp, debugPort)
         Renderer.debugCopy = True
-    
-    #read dictionaries with config informations
 
-
-    configurationDict = getConfigurationFromFile(configpath)
-
+    # set extended OSC String Input Format (whatever that may be)
     extendedOscInput = True
     osccomcenter.extendedOscInput = extendedOscInput
 
-    globalconfig = configurationDict['globalconfig']
-    # SoundObject.globalConfig = globalconfig
+    # prepare globalconfig
+    globalconfig = config["globalconfig"]
+    globalconfig["numberofrenderengines"] = config["globalconfig"]["number_renderunits"]
+
+    # set global config in objects
     SoundObject.readGlobalConfig(globalconfig)
+    SoundObject.number_renderer = int(globalconfig["numberofrenderengines"])
     Renderer.globalConfig = globalconfig
     osccomcenter.globalconfig = globalconfig
 
-    globalconfig['numberofrenderengines'] = configurationDict['globalconfig']['number_renderunits']#len(configurationDict['renderengine'].keys())
+    # setup number of sources
+    numberofsources = int(globalconfig["number_sources"])  # 64
 
-    # inputport_data = int(globalconfig['inputport_data'])       #for automation data. Input will not be mirrored to 'dataclients'
-    # inputport_ui = int(globalconfig['inputport_ui'])         #for ui applications. Input will be send to every client
-    # settings_port = int(globalconfig['settings_port'])
+    Renderer.numberOfSources = numberofsources
 
-    # max_gain = float(globalconfig['max_gain'])
-    # SoundObject.maxGain = max_gain
-
-    numberofrenderengines = len(configurationDict['renderengine'].keys())
-    numberofsources = int(globalconfig['number_sources']) #64
-
-    Renderer.numberOfSources = numberofsources  #
-    SoundObject.number_renderer = int(globalconfig['numberofrenderengines'])
-
-    # SoundObject.preferUi = bool(globalconfig['data_port_timeout'] == 0)
-
-    # higher_priority_pos_timeout = 1 #sec a source will be blocked for automation when using "higher priority" socket
-    # SoundObject.data_port_timeout = higher_priority_pos_timeout
-    #endregion
-
-    #region Data initialisation
-
-
+    # region Data initialisation
     soundobjects: [SoundObject] = []
     for i in range(numberofsources):
-        soundobjects.append(SoundObject(objectID=i+1))
+        soundobjects.append(SoundObject(objectID=i + 1))
     Renderer.sources = soundobjects
 
     audiorouter: Renderer = None
@@ -143,88 +143,72 @@ def main():
     uiClients: [Renderer] = []
     allClients: [Renderer] = []
 
-    print('setting audiorouter connection\n')
-    if 'audiorouter' in configurationDict.keys():
-        for dic in configurationDict['audiorouter']:
+    # creating audiorouters
+    log.info("setting audiorouter connection")
+    if "audiorouters" in config:
+        for dic in config["audiorouters"]:
             if not audiorouter:
-                audiorouter = rendererclass.createRendererClient(skc.renderClass.Audiorouter, kwargs=dic)
+                audiorouter = rendererclass.createRendererClient(
+                    skc.renderClass.Audiorouter, kwargs=dic
+                )
             else:
-                audiorouter.addDestination(dic['ipaddress'], dic['listenport'])
+                audiorouter.addDestination(dic["ipaddress"], dic["listenport"])
     else:
-        print('!!! NO AUDIOROUTER CONFIGURED')
-    print()
+        log.warning("NO AUDIOROUTER CONFIGURED")
 
-    if 'audiorouterWFS' in configurationDict.keys():
-        for dic in configurationDict['audiorouterWFS']:
+    # creating WFS audiorouters
+    if "audioroutersWFS" in config:
+        for dic in config["audioroutersWFS"]:
             if not audiorouterWFS:
-                audiorouterWFS = rendererclass.createRendererClient(skc.renderClass.AudiorouterWFS, kwargs=dic)
+                audiorouterWFS = rendererclass.createRendererClient(
+                    skc.renderClass.AudiorouterWFS, kwargs=dic
+                )
             else:
-                audiorouterWFS.addDestination(dic['ipaddress'], dic['listenport'])
+                audiorouterWFS.addDestination(dic["ipaddress"], dic["listenport"])
     else:
-        print('!!! NO WFS-AUDIOROUTER CONFIGURED')
+        log.warning("NO WFS-AUDIOROUTER CONFIGURED")
 
-    print('setting renderer connection\n')
-    if 'renderengine' in configurationDict.keys():
-        for type, configdata in configurationDict['renderengine'].items():
-            renderengineClients.append(rendererclass.createRendererClient(skc.renderClass(type), configdata))
+    # creating render engines
+    log.info("setting renderer connectio")
+    if "renderengines" in config:
+        for render_type, render_engine in config["renderengines"].items():
+            renderengineClients.append(
+                rendererclass.createRendererClient(
+                    skc.renderClass(render_type), render_engine
+                )
+            )
     else:
-        print('no renderer clients in configfile')
-    print()
+        log.info("no renderer clients in configfile")
 
-    print('setting data_client connections\n')
-    if 'dataclient' in configurationDict.keys():
-        for type, configdata in configurationDict['dataclient'].items():
-            dataClients.append(rendererclass.createRendererClient(skc.renderClass(type), kwargs=configdata))
+    # creating data clients
+    log.info("setting data_client connections")
+    if "dataclients" in config:
+        for client_type, dataclient in config["dataclients"].items():
+            dataClients.append(
+                rendererclass.createRendererClient(
+                    skc.renderClass(client_type), kwargs=dataclient
+                )
+            )
     else:
-        print('no data clients in configfile')
-    print()
+        log.warning("no data clients in configfile")
 
-    print('setting UI-client connections\n')
-    if 'viewclient' in configurationDict.keys():
-        for type, configdata in configurationDict['viewclient'].items():
-            uiClients.append(rendererclass.createRendererClient(skc.renderClass(type), kwargs=configdata))
+    # creating UI clients
+    log.info("setting UI-client connections")
+    if "viewclients" in config:
+        for client_type, viewclient in config["viewclients"].items():
+            uiClients.append(
+                rendererclass.createRendererClient(
+                    skc.renderClass(client_type), kwargs=viewclient
+                )
+            )
     else:
-        print('no UI-clients in configfile')
-    print('\n')
+        log.info("no UI-clients in configfile")
 
-    print('max number of sources is set to', str(numberofsources))
-    print('number of rendering units is', str(globalconfig['numberofrenderengines']))
-    if 'index_ambi' in globalconfig.keys():
-        print('ambisonics index:', globalconfig['index_ambi'])
-    if 'index_wfs' in globalconfig.keys():
-        print('wfs index:', globalconfig['index_wfs'])
-    if 'index_reverb' in globalconfig.keys():
-        print('reverb index:', globalconfig['index_reverb'])
-
-    print('UI listenport:', globalconfig[skc.inputport_ui])
-    print('DATA listenport (for automation):', globalconfig[skc.inputport_data])
-    print('port for settings, ping and client subscription is:', globalconfig[skc.inputport_settings], '\n')
-    if extendedOscInput:
-        print('extended osc-string listening activated')
-    else:
-        print('only basic osc-strings will be accepted')
-
-    print('max gain is', globalconfig[skc.max_gain])
-
+    # add all clients to the allclients list
     for ren in [*renderengineClients, *dataClients, *uiClients]:
         allClients.append(ren)
 
-    #endregion
-
-
-    if Renderer.debugCopy:
-        print('Osc-Messages will be copied to', debugIp, ':', debugPort)
-    else:
-        print('No Debug client configured')
-
-    print('Verbosity Level is', args.verbose)
-    if args.verbose == 1:
-        print('outgoing osc will be printed in console')
-    elif args.verbose > 1:
-        print('incoming and outgoing osc will be printed in console')
-
-    # print('creating OSC bindings...')
-    ###
+    # Setup OSC Com center
     osccomcenter.soundobjects = soundobjects
     osccomcenter.audiorouter = audiorouter
     osccomcenter.audiorouterWFS = audiorouterWFS
@@ -234,14 +218,16 @@ def main():
     osccomcenter.allClients = allClients
 
     osccomcenter.setupOscBindings()
-    ###
 
-    print()
-    print('OSC router ready to use')
-    print('have fun...')
+    #
+    if verbose > 0:
+        debug_prints(globalconfig, extendedOscInput, verbose)
+
+    log.info("OSC router ready to use")
+    log.info("have fun...")
 
     signal.pause()
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()

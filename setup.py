@@ -4,9 +4,9 @@ setup(
     name="seamless_oscrouter",
     version="1.0",
     packages=["seamless_oscrouter"],
-    install_requires=["numpy", "oscpy"],
+    install_requires=["numpy", "oscpy", "click", "pyYAML"],
     entry_points="""
     [console_scripts]
     seamless-oscrouter=seamless_oscrouter.oscrouter:main
-    """
+    """,
 )
