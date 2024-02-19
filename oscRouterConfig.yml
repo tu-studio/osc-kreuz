@@ -14,28 +14,46 @@ globalconfig:
   send_changes_only: 1 # checks every input for changes, if set to 1 might be slower
   data_port_timeout: 2 # time a change in the ui-port blocks incoming automation, set to 0 to deactivate this feature
 
-audiorouters:
-  - ipaddress: 127.0.0.1
-    listenport: 57120
-    sendport: 59999
+# changed to remove sendport, rename listenport to port
+receivers:
+  - type: audiorouter
+    addresses:
+      - ip_address: 127.0.0.1
+        port: 57120
+      - ip_address: 127.0.0.1
+        port: 57119
     updateintervall: 5
-audioroutersWFS:
-  - ipaddress: 127.0.0.1
-    listenport: 57121
-    sendport: 59999
+
+  - type: audiorouterWFS
+    addresses:
+      - ip_address: 127.0.0.1
+        port: 57121
     updateintervall: 5
+
+  - type: audiomatrix
+    addresses:
+      - ip_address: 127.0.0.1
+        port: 57122
+    updateintervall: 5 
+
+  - type: wonder
+    addresses:
+      - ip_address: 127.0.0.1
+        port: 58100
+    updateintervall: 50
+
+  - type: scengine
+    ip_address: 127.0.0.1
+    port: 57120
+    updateintervall: 10
+    dataformat: aedrad
+
 
 renderengines:
   scengine:
-    renderid: 0
-    ipaddress: 127.0.0.1
-    listenport: 57120
-    sendport: 59998
-    updateintervall: 10
-    dataformat: aedrad
+    ip_address: 127.0.0.1
+    
   wonder:
-    renderid: 1
-    ipaddress: 127.0.0.1
-    listenport: 58100
-    sendport: 10101
+    
+    port: 58100
     updateintervall: 50

@@ -17,6 +17,7 @@ import signal
 import argparse
 import yaml
 import logging
+import sys
 
 logFormat = "%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]: %(message)s"
 timeFormat = "%Y-%m-%d %H:%M:%S"
@@ -93,10 +94,11 @@ def main(config_path, oscdebug, verbose):
         ]:
             if possible_config_path.exists():
                 config_path = possible_config_path
+                log.info(f"Loading config file {config_path}")
                 break
 
         if config_path is None:
-            log.warning("Could not find config file, falling back to default config!")
+            log.warning("Could not find config file, falling back to default config")
             config_path = Path(__file__).parent.parent / "oscRouterConfig.yml"
 
     # read config file
@@ -136,86 +138,23 @@ def main(config_path, oscdebug, verbose):
         soundobjects.append(SoundObject(objectID=i + 1))
     Renderer.sources = soundobjects
 
-    audiorouter: Renderer = None
-    audiorouterWFS: Renderer = None
-    renderengineClients: [Renderer] = []
-    dataClients: [Renderer] = []
-    uiClients: [Renderer] = []
-    allClients: [Renderer] = []
+    receivers: [Renderer] = []
 
     # creating audiorouters
-    log.info("setting audiorouter connection")
-    if "audiorouters" in config:
-        for dic in config["audiorouters"]:
-            if not audiorouter:
-                audiorouter = rendererclass.createRendererClient(
-                    skc.renderClass.Audiorouter, kwargs=dic
-                )
-            else:
-                audiorouter.addDestination(dic["ipaddress"], dic["listenport"])
-    else:
-        log.warning("NO AUDIOROUTER CONFIGURED")
-
-    # creating WFS audiorouters
-    if "audioroutersWFS" in config:
-        for dic in config["audioroutersWFS"]:
-            if not audiorouterWFS:
-                audiorouterWFS = rendererclass.createRendererClient(
-                    skc.renderClass.AudiorouterWFS, kwargs=dic
-                )
-            else:
-                audiorouterWFS.addDestination(dic["ipaddress"], dic["listenport"])
-    else:
-        log.warning("NO WFS-AUDIOROUTER CONFIGURED")
-
-    # creating render engines
-    log.info("setting renderer connectio")
-    if "renderengines" in config:
-        for render_type, render_engine in config["renderengines"].items():
-            renderengineClients.append(
-                rendererclass.createRendererClient(
-                    skc.renderClass(render_type), render_engine
-                )
-            )
-    else:
-        log.info("no renderer clients in configfile")
-
-    # creating data clients
-    log.info("setting data_client connections")
-    if "dataclients" in config:
-        for client_type, dataclient in config["dataclients"].items():
-            dataClients.append(
-                rendererclass.createRendererClient(
-                    skc.renderClass(client_type), kwargs=dataclient
-                )
-            )
-    else:
-        log.warning("no data clients in configfile")
-
-    # creating UI clients
-    log.info("setting UI-client connections")
-    if "viewclients" in config:
-        for client_type, viewclient in config["viewclients"].items():
-            uiClients.append(
-                rendererclass.createRendererClient(
-                    skc.renderClass(client_type), kwargs=viewclient
-                )
-            )
-    else:
-        log.info("no UI-clients in configfile")
-
-    # add all clients to the allclients list
-    for ren in [*renderengineClients, *dataClients, *uiClients]:
-        allClients.append(ren)
+    log.info("setting up receivers")
+    if "receivers" in config:
+        for receiver_config in config["receivers"]:
+            if not "type" in receiver_config:
+                log.warning("receiver has no type specified, skipping")
+                continue
+            try:
+                receivers.append(rendererclass.createRendererClient(receiver_config))
+            except rendererclass.RendererException as e:
+                log.error(e)
+                sys.exit(-1)
 
     # Setup OSC Com center
-    osccomcenter.soundobjects = soundobjects
-    osccomcenter.audiorouter = audiorouter
-    osccomcenter.audiorouterWFS = audiorouterWFS
-    osccomcenter.renderengineClients = renderengineClients
-    osccomcenter.dataClients = dataClients
-    osccomcenter.uiClients = uiClients
-    osccomcenter.allClients = allClients
+    osccomcenter.receivers = receivers
 
     osccomcenter.setupOscBindings()
 

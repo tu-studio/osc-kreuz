@@ -1,3 +1,5 @@
+project('OscRouter')
+
 data_path = get_option('datadir') / 'seamless-core' / 'oscrouter'
 config_path = get_option('sysconfdir') / 'seamless-core' / 'oscrouter'
 

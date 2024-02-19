@@ -19,7 +19,12 @@ log = logging.getLogger("renderer")
 verbosity = 0
 
 
+class RendererException(Exception):
+    pass
+
+
 class Renderer(object):
+
     numberOfSources = 64
     sources: [SoundObject] = []
     globalConfig = {}
@@ -42,24 +47,33 @@ class Renderer(object):
         self,
         dataformat=skc.xyz,
         updateintervall=10,
-        ipaddress="127.0.0.1",
-        listenport=4002,
-        continuously_update_intervall=-1,
-        renderid=-1,
-        sendport=0,
+        ip_address="127.0.0.1",
+        addresses: [dict] = None,
+        port=4002,
         sourceattributes=(),
-        indexAsValue=0,
+        indexAsValue=0,  # XXX unused
     ):
         self.setVerbosity(verbosity)
 
-        self.renderid = int(renderid)
         self.posFormat = dataformat
         self.validSinglePosKeys = {}
         self.sourceAttributes = sourceattributes
-        self.ipaddress = [ipaddress]
-        self.listenport = [int(listenport)]
+
+        # check if addresses are defined as an array
+        if addresses is None:
+            self.ip_address = [ip_address]
+            self.port = [int(port)]
+        else:
+            self.ip_address = []
+            self.port = []
+            for address in addresses:
+                try:
+                    self.ip_address.append(address["ip_address"])
+                    self.port.append(address["port"])
+                except:
+                    raise RendererException("Invalid Address")
+
         self.updateIntervall = int(updateintervall) / 1000
-        self.continuously_update_intervall = int(continuously_update_intervall)
 
         self.source_needs_update = [False] * self.numberOfSources
         self.source_getting_update = [False] * self.numberOfSources
@@ -72,46 +86,28 @@ class Renderer(object):
         self.debugPrefix = "/genericRenderer"
         self.oscPre = ("/source/" + self.posFormat).encode()
 
-        self.sendOsc = True
-
-        self.multipleDestinations = False
-
-        self.continous_update = self.continuously_update_intervall > 0
-
         self.toRender: [OSCClient] = []
-        for idx, ip in enumerate(self.ipaddress):
-            self.toRender.append(OSCClient(ip, self.listenport[0], encoding="utf8"))
+        for idx, ip in enumerate(self.ip_address):
+            self.toRender.append(OSCClient(ip, self.port[0], encoding="utf8"))
 
         self.isDataClient = False
 
         self.printRenderInformation()
-
-        # self.sources_updatecounter = 0
-
-    def stopOscSend(self, pauseDuration=20):
-        self.sendOsc = False
-        if pauseDuration > 0:
-            Timer(pauseDuration, self.startOscSend)
-
-    def startOscSend(self):
-        self.sendOsc = True
 
     def printRenderInformation(self):
         info = [
             self.myType(),
             "\n",
             "address:",
-            self.ipaddress,
-            "listenport:",
-            self.listenport,
+            self.ip_address,
+            "port:",
+            self.port,
             "\n",
             "listening to format",
             self.posFormat,
             "\n",
         ]
-        if self.renderid >= 0:
-            info.insert(1, "renderID:")
-            info.insert(2, self.renderid)
+
         log.info("".join([str(i) for i in info]))
 
     def myType(self) -> str:
@@ -121,10 +117,6 @@ class Renderer(object):
         self.toRender.append(OSCClient(ip, port, encoding="utf8"))
 
         log.debug(self.myType(), "added destination", ip, str(port))
-
-    def setContinousUpdateIntervall(self, update):
-        self.continuously_update_intervall = update
-        self.continous_update = update > 0
 
     def composeSourceUpdateMessage(self, values, sIdx: int = 0, *args) -> [(bytes, [])]:
         return [(args[0], values)]
@@ -204,23 +196,6 @@ class Renderer(object):
     def sourcePositionChanged(self, source_idx):
         pass
 
-        # print('blabla')
-
-    # the following were not needed anymore
-    def sendSourcePosition(self, source_idx):
-        pass
-
-    def sourceNeedGainUpdate(self, source_idx):
-        pass
-
-    def sendSourceAttributeMessage(self, sidx, attribute):
-        pass
-
-    # future functions. Mainly intended for UIs so maybe move in that subclass
-    def getSceneData(self):
-        for idx in range(len(self.sources)):
-            self.sendSourcePosition(idx)
-
     def oscDebugSend(self, oscStr, data: []):
         decStr = oscStr.decode()
         newOscAddr = self.debugPrefix + decStr
@@ -228,9 +203,7 @@ class Renderer(object):
 
     def printOscOutput(self, oscStr, data: []):
         decStr = oscStr.decode()
-        # newOscAddr = self.debugPrefix + decStr
         log.debug("OSC out", self.debugPrefix, decStr, data)
-        # self.oscDebugClient.send_message(newOscAddr.encode(), data)
 
 
 class SpatialRenderer(Renderer):
@@ -338,31 +311,19 @@ class Audiorouter(Renderer):
             self.myType(),
             "\n",
             "address:",
-            self.ipaddress,
-            "listenport:",
-            self.listenport,
+            self.ip_address,
+            "port:",
+            self.port,
             "\n",
             "listening to format",
             "send to render gains",
             "\n",
         ]
-        if self.renderid >= 0:
-            info.insert(1, "renderID:")
-            info.insert(2, self.renderid)
+
         log.info("".join([str(i) for i in info]))
 
     def myType(self) -> str:
         return "Audiorouter"
-
-    # def updateSource(self, source_idx):
-    #
-    #     while self.updateStack[source_idx]:
-    #         getValueFunc, oscPre, secondIndex = self.updateStack[source_idx].pop()
-    #         value = getValueFunc()
-    #         msgs = self.composeSourceUpdateMessage(value, source_idx, secondIndex, *oscPre)
-    #         self.sendUpdates(msgs)
-    #
-    #     self.scheduleSourceUpdateCheck(source_idx)
 
     def composeSourceUpdateMessage(self, values, sIdx: int = 0, *args) -> [(bytes, [])]:
         osc_pre = args[0]
@@ -419,6 +380,15 @@ class AudiorouterWFS(Audiorouter):
 
     def myType(self) -> str:
         return "Audiorouter-WFS"
+
+
+class AudioMatrix(Renderer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.debugPrefix = "/dAudioMatrix"
+
+    def myType(self) -> str:
+        return "AudioMatrix"
 
 
 class Panoramix(SpatialRenderer):
@@ -552,9 +522,9 @@ class ViewClient(SpatialRenderer):
                 renderList[self.globalConfig["index_wfs"]] = "/source/{}/wfs".format(
                     i + 1
                 ).encode()
-                renderList[
-                    self.globalConfig["index_reverb"]
-                ] = "/source/{}/reverb".format(i + 1).encode()
+                renderList[self.globalConfig["index_reverb"]] = (
+                    "/source/{}/reverb".format(i + 1).encode()
+                )
             else:
                 for j in range(self.globalConfig["number_renderunits"]):
                     self.idxSourceOscPreRender[i][j] = "/source/{}/send/{}".format(
@@ -623,8 +593,6 @@ class ViewClient(SpatialRenderer):
             return [(args[0], values)]
         else:
             return [(args[0], [values])]
-
-    # TODO: send complete Scene data
 
 
 class Oscar(SpatialRenderer):
@@ -737,16 +705,12 @@ class SeamlessPlugin(SpatialRenderer):
             kwargs["dataformat"] = skc.xyz
         super(SeamlessPlugin, self).__init__(**kwargs)
 
-        # self.basePort = 11000
-
         self.sourceAttributes = (
             skc.SourceAttributes.doppler,
             skc.SourceAttributes.planewave,
         )
 
         self.oscAddrs: dict = {}
-
-        # self.oscPosAddr = b"/source"
 
         for key in skc.fullformat[self.posFormat]:
             self.oscAddrs[key] = "/source/pos/{}".format(key).encode()
@@ -757,17 +721,6 @@ class SeamlessPlugin(SpatialRenderer):
         self.oscAddrs["renderGain"] = "/send/gain".encode()
 
         self.debugPrefix = "/dSeamlessPlugin"
-
-    # def updateSource(self, source_idx):
-    #
-    #     while self.updateStack[source_idx]:
-    #         getValueFunc, oscPre = self.updateStack[source_idx].pop()
-    #         values = getValueFunc()
-    #
-    #         msgs = self.composeSourceUpdateMessage(oscPre, values, source_idx)
-    #         self.sendUpdates(msgs)
-    #
-    #     self.scheduleSourceUpdateCheck(source_idx)
 
     def composeSourceUpdateMessage(self, values, sIdx: int = 0, *args) -> [(bytes, [])]:
         osc_pre = args[0]
@@ -804,43 +757,44 @@ class DataClient(Audiorouter, SpatialRenderer):
     pass
 
 
-def createRendererClient(renderclass: renderclasstype, kwargs) -> Renderer:
-    # config = reconf.getConfig(renderclass)
-    # for key, value in config.items():
-    #     if not key in kwargs.keys():
-    #         kwargs[key] = value
+renderer_name_dict = {
+    "wonder": Wonder,
+    "panoramix": Panoramix,
+    "iemmultiencoder": IemMultiencoder,
+    "viewclient": ViewClient,
+    "oscar": Oscar,
+    "scengine": SuperColliderEngine,
+    "audiorouter": Audiorouter,
+    "seamlessplugin": SeamlessPlugin,
+    "audiorouterwfs": AudiorouterWFS,
+    "audiomatrix": AudioMatrix,
+}
 
-    if "dataformat" in kwargs.keys():
-        tmp_dataFormat = kwargs["dataformat"]
+
+def createRendererClient(config: dict) -> Renderer:
+
+    # XXX some weird shit is happening here
+    if "dataformat" in config:
+        tmp_dataFormat = config["dataformat"]
         if not tmp_dataFormat in skc.posformat.keys():
-            # print(tmp_dataFormat)
             if len(tmp_dataFormat.split("_")) == 2:
                 preStr = ""
                 if tmp_dataFormat.split("_")[0] == "normcartesian":
                     preStr = "n"
 
                 dFo = preStr + tmp_dataFormat.split("_")[1]
-                kwargs["dataformat"] = dFo
+                config["dataformat"] = dFo
             else:
                 log.warn("unknown position format")
-                del kwargs["dataformat"]
-    if renderclass == renderclasstype.Wonder:
-        rend = Wonder(**kwargs)
-    elif renderclass == renderclasstype.Panoramix:
-        rend = Panoramix(**kwargs)
-    elif renderclass == renderclasstype.Oscar:
-        rend = Oscar(**kwargs)
-    elif renderclass == renderclasstype.Scengine:
-        rend = SuperColliderEngine(**kwargs)
-    elif renderclass == renderclasstype.SeamlessPlugin:
-        rend = SeamlessPlugin(**kwargs)
-    elif renderclass == renderclasstype.Audiorouter:
-        rend = Audiorouter(**kwargs)
-        return rend
-    elif renderclass == renderclasstype.AudiorouterWFS:
-        rend = AudiorouterWFS(**kwargs)
+                del config["dataformat"]
 
-    else:
-        rend = Renderer()
+    if "type" not in config:
+        raise RendererException("Type of receiver unspecified")
 
-    return rend
+    renderer_type = config["type"].lower()
+    del config["type"]
+
+    if renderer_type not in renderer_name_dict:
+        raise RendererException(f"Invalid receiver type: {renderer_type}")
+
+    return renderer_name_dict[renderer_type](**config)
