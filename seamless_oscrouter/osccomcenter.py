@@ -4,9 +4,12 @@ from oscpy.server import OSCThreadServer
 from functools import partial
 from seamless_oscrouter.soundobjectclass import SoundObject
 import ipaddress
+import logging
+
+log = logging.getLogger("OSCcomcenter")
 
 
-soundobjects: [SoundObject] = []
+soundobjects: list[SoundObject] = []
 
 clientSubscriptions = {}
 # audiorouter: Renderer
@@ -15,7 +18,7 @@ clientSubscriptions = {}
 # dataClients: [Renderer] = []
 # uiClients: [Renderer] = []
 # allClients: [Renderer] = []
-receivers: [Renderer] = []
+receivers: list[Renderer] = []
 globalconfig = dict()
 extendedOscInput = True
 verbosity = 0

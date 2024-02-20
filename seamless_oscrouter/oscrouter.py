@@ -29,21 +29,21 @@ default_config_file_path = "seamless-core/oscrouter/oscRouterConfig.yml"
 
 
 def debug_prints(globalconfig, extendedOscInput, verbose):
-    log.debug("max number of sources is set to", str(globalconfig["number_sources"]))
+    log.debug("max number of sources is set to %s", str(globalconfig["number_sources"]))
     log.debug(
-        "number of rendering units is", str(globalconfig["numberofrenderengines"])
+        "number of rendering units is %s", str(globalconfig["numberofrenderengines"])
     )
     if "index_ambi" in globalconfig.keys():
-        log.debug("ambisonics index:", globalconfig["index_ambi"])
+        log.debug("ambisonics index: %s", globalconfig["index_ambi"])
     if "index_wfs" in globalconfig.keys():
-        log.debug("wfs index:", globalconfig["index_wfs"])
+        log.debug("wfs index: %s", globalconfig["index_wfs"])
     if "index_reverb" in globalconfig.keys():
-        log.debug("reverb index:", globalconfig["index_reverb"])
+        log.debug("reverb index: %s", globalconfig["index_reverb"])
 
-    log.debug("UI listenport:", globalconfig[skc.inputport_ui])
-    log.debug("DATA listenport (for automation):", globalconfig[skc.inputport_data])
+    log.debug("UI listenport: %s", globalconfig[skc.inputport_ui])
+    log.debug("DATA listenport (for automation): %s", globalconfig[skc.inputport_data])
     log.debug(
-        "port for settings, ping and client subscription is:",
+        "port for settings, ping and client subscription is: %s",
         globalconfig[skc.inputport_settings],
     )
     if extendedOscInput:
@@ -51,14 +51,14 @@ def debug_prints(globalconfig, extendedOscInput, verbose):
     else:
         log.debug("only basic osc-strings will be accepted")
 
-    log.debug("max gain is", globalconfig[skc.max_gain])
+    log.debug("max gain is %s", globalconfig[skc.max_gain])
 
     if Renderer.debugCopy:
         log.debug("Osc-Messages will be copied to somewhere")
     else:
         log.debug("No Debug client configured")
 
-    log.debug("Verbosity Level is", verbose)
+    log.debug("Verbosity Level is %s", verbose)
     if verbose == 1:
         log.debug("outgoing osc will be printed in console")
     elif verbose > 1:
@@ -132,13 +132,13 @@ def main(config_path, oscdebug, verbose):
 
     Renderer.numberOfSources = numberofsources
 
-    # region Data initialisation
-    soundobjects: [SoundObject] = []
+    # Data initialisation
+    soundobjects: list[SoundObject] = []
     for i in range(numberofsources):
         soundobjects.append(SoundObject(objectID=i + 1))
     Renderer.sources = soundobjects
 
-    receivers: [Renderer] = []
+    receivers: list[Renderer] = []
 
     # creating audiorouters
     log.info("setting up receivers")
@@ -154,6 +154,7 @@ def main(config_path, oscdebug, verbose):
                 sys.exit(-1)
 
     # Setup OSC Com center
+    osccomcenter.soundobjects = soundobjects
     osccomcenter.receivers = receivers
 
     osccomcenter.setupOscBindings()

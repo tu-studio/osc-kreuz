@@ -13,7 +13,11 @@ globalconfig:
   number_direct_sends: 46 # including subwoofer
   send_changes_only: 1 # checks every input for changes, if set to 1 might be slower
   data_port_timeout: 2 # time a change in the ui-port blocks incoming automation, set to 0 to deactivate this feature
-
+  render_units: [
+    "ambi",
+    "wfs",
+    "reverb"
+  ]
 # changed to remove sendport, rename listenport to port
 receivers:
   - type: audiorouter
@@ -34,6 +38,14 @@ receivers:
     addresses:
       - ip_address: 127.0.0.1
         port: 57122
+    paths:
+      - path: /source/gain/wfs
+        renderer: wfs
+        type: gain
+      - path: /source/gain/ambi
+        type: gain
+        renderer: ambi
+
     updateintervall: 5 
 
   - type: wonder
@@ -47,13 +59,3 @@ receivers:
     port: 57120
     updateintervall: 10
     dataformat: aedrad
-
-
-renderengines:
-  scengine:
-    ip_address: 127.0.0.1
-    
-  wonder:
-    
-    port: 58100
-    updateintervall: 50

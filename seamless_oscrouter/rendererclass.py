@@ -1,7 +1,6 @@
 # import renderer_config as reconf
 from seamless_oscrouter.soundobjectclass import SoundObject
 import seamless_oscrouter.str_keys_conventions as skc
-from seamless_oscrouter.str_keys_conventions import renderClass as renderclasstype
 import seamless_oscrouter.conversionsTools as ct
 from oscpy.client import OSCClient
 
@@ -10,6 +9,7 @@ import time
 from threading import Timer
 from functools import partial
 from sched import scheduler
+from typing import Any, Callable
 
 # from enum import Enum
 from collections.abc import Iterable
@@ -26,7 +26,7 @@ class RendererException(Exception):
 class Renderer(object):
 
     numberOfSources = 64
-    sources: [SoundObject] = []
+    sources: list[SoundObject] = []
     globalConfig = {}
     debugCopy: bool = False
     oscDebugClient: OSCClient
@@ -48,7 +48,7 @@ class Renderer(object):
         dataformat=skc.xyz,
         updateintervall=10,
         ip_address="127.0.0.1",
-        addresses: [dict] = None,
+        addresses: list[dict] | None = None,
         port=4002,
         sourceattributes=(),
         indexAsValue=0,  # XXX unused
@@ -75,18 +75,18 @@ class Renderer(object):
 
         self.updateIntervall = int(updateintervall) / 1000
 
-        self.source_needs_update = [False] * self.numberOfSources
-        self.source_getting_update = [False] * self.numberOfSources
-        self.updateStack: [set] = [
+        self.source_needs_update: list[bool] = [False] * self.numberOfSources
+        self.source_getting_update: list[bool] = [False] * self.numberOfSources
+        self.updateStack: list[set[tuple[Callable, bytes]]] = [
             set()
-        ]  # Tupel (<getValueFromSource function> </osctring>)
+        ]  # Tuple (<getValueFromSource function> </osctring>)
         for s in range(1, self.numberOfSources):
             self.updateStack.append(set())
 
         self.debugPrefix = "/genericRenderer"
         self.oscPre = ("/source/" + self.posFormat).encode()
 
-        self.toRender: [OSCClient] = []
+        self.toRender: list[OSCClient] = []
         for idx, ip in enumerate(self.ip_address):
             self.toRender.append(OSCClient(ip, self.port[0], encoding="utf8"))
 
@@ -118,7 +118,9 @@ class Renderer(object):
 
         log.debug(self.myType(), "added destination", ip, str(port))
 
-    def composeSourceUpdateMessage(self, values, sIdx: int = 0, *args) -> [(bytes, [])]:
+    def composeSourceUpdateMessage(
+        self, values, sIdx: int = 0, *args
+    ) -> list[tuple[bytes, Iterable]]:
         return [(args[0], values)]
 
     def sourceChanged(self, source_idx):
@@ -128,28 +130,35 @@ class Renderer(object):
             self.source_needs_update[source_idx] = True
 
     def updateSource(self, source_idx):
+        """Builds and sends source update messages
+
+        Args:
+            source_idx (int): index of source to be updated
+        """
         while self.updateStack[source_idx]:
             getValueFunc, oscPre = self.updateStack[source_idx].pop()
             values = getValueFunc()
 
-            # print("wonder update Source:",oscPre)
             msgs = self.composeSourceUpdateMessage(values, source_idx, *oscPre)
             self.sendUpdates(msgs)
 
         self.scheduleSourceUpdateCheck(source_idx)
 
     def sendUpdates(self, msgs):
+        """This function sends all messages to the osc clients
+
+        Args:
+            msgs (list(list)): list of messages
+        """
         for msg in msgs:
             for toRenderClient in self.toRender:
                 try:
                     oscArgs = msg[1]
                     toRenderClient.send_message(msg[0], oscArgs)
-                    # if isinstance(oscArgs, Iterable):
-                    #     toRenderClient.send_message(msg[0], oscArgs)
-                    # else:
-                    #     toRenderClient.send_message(msg[0], [oscArgs])
-                except:
-                    pass  # print('sendfail')
+
+                except Exception as e:
+                    log.warn(f"Exception while sending: {e}")
+                    pass
 
                 if self.debugCopy:
                     debugOsc = (
@@ -167,9 +176,6 @@ class Renderer(object):
 
             if self.printOutput:
                 self.printOscOutput(msg[0], msg[1])
-
-    def sendToDebugClient(self):
-        pass
 
     def scheduleSourceUpdateCheck(self, source_idx):
         self.source_needs_update[source_idx] = False
@@ -196,12 +202,12 @@ class Renderer(object):
     def sourcePositionChanged(self, source_idx):
         pass
 
-    def oscDebugSend(self, oscStr, data: []):
+    def oscDebugSend(self, oscStr, data: list):
         decStr = oscStr.decode()
         newOscAddr = self.debugPrefix + decStr
         self.oscDebugClient.send_message(newOscAddr.encode(), data)
 
-    def printOscOutput(self, oscStr, data: []):
+    def printOscOutput(self, oscStr, data: list):
         decStr = oscStr.decode()
         log.debug("OSC out", self.debugPrefix, decStr, data)
 
@@ -219,7 +225,9 @@ class SpatialRenderer(Renderer):
         )
         self.sourceChanged(source_idx)
 
-    def composeSourceUpdateMessage(self, values, sIdx: int = 0, *args) -> [(bytes, [])]:
+    def composeSourceUpdateMessage(
+        self, values, sIdx: int = 0, *args
+    ) -> list[tuple[bytes, Iterable]]:
         return [(args[0], *values)]
 
 
@@ -258,7 +266,9 @@ class Wonder(SpatialRenderer):
         )
         self.sourceChanged(source_idx)
 
-    def composeSourceUpdateMessage(self, values, sIdx: int = 0, *args) -> [(bytes, [])]:
+    def composeSourceUpdateMessage(
+        self, values, sIdx: int = 0, *args
+    ) -> list[tuple[bytes, Iterable]]:
         osc_pre = args[0]
         wonderOscMap = {
             b"/WONDER/source/position": self.wonderPositionValues,
@@ -271,21 +281,21 @@ class Wonder(SpatialRenderer):
 
         return [(osc_pre, send_values)]
 
-    def wonderPositionValues(self, sIdx: int, values) -> []:
+    def wonderPositionValues(self, sIdx: int, values) -> list:
         if self.linkPositionAndAngle and self.sources[sIdx].getAttribute(
             skc.SourceAttributes.planewave
         ):
             self.addUpdateAngleToStack(sIdx)
         return [sIdx, *values, self.interpolTime]
 
-    def wonderAngleValues(self, sIdx, values) -> []:
+    def wonderAngleValues(self, sIdx, values) -> list:
         # TODO: Umrechnen
         return [sIdx, values, self.interpolTime]
 
-    def wonderDopplerValues(self, sIdx, value) -> []:
+    def wonderDopplerValues(self, sIdx, value) -> list:
         return [sIdx, value]
 
-    def wonderPlanewave(self, sIdx, value) -> []:
+    def wonderPlanewave(self, sIdx, value) -> list:
         if value:
             self.addUpdateAngleToStack(sIdx)
         return [sIdx, int(not value)]
@@ -325,7 +335,9 @@ class Audiorouter(Renderer):
     def myType(self) -> str:
         return "Audiorouter"
 
-    def composeSourceUpdateMessage(self, values, sIdx: int = 0, *args) -> [(bytes, [])]:
+    def composeSourceUpdateMessage(
+        self, values, sIdx: int = 0, *args
+    ) -> list[tuple[bytes, Iterable]]:
         osc_pre = args[0]
 
         if osc_pre == self.oscpre_reverbGain:
@@ -383,12 +395,49 @@ class AudiorouterWFS(Audiorouter):
 
 
 class AudioMatrix(Renderer):
-    def __init__(self, **kwargs):
+    def __init__(self, paths: Iterable[dict["str", Any]], **kwargs):
         super().__init__(**kwargs)
         self.debugPrefix = "/dAudioMatrix"
+        self.gain_paths: dict[int, list[bytes]] = {}
+        self.render_unit_indices = {}
+
+        # prepare gain path with all render unit indices
+        for index, render_unit in enumerate(self.globalConfig["render_units"]):
+            self.render_unit_indices[index] = render_unit
+            self.render_unit_indices[render_unit] = index
+            self.gain_paths[index] = []
+
+        for path in paths:
+            osc_path: str = path["path"]
+            renderer = path["renderer"]
+            renderer_index = self.render_unit_indices[renderer]
+            renderer_type = path["type"]
+            if renderer_type == "gain":
+                self.gain_paths[renderer_index].append(osc_path.encode())
+
+        log.debug("Audio Matrix initialized")
 
     def myType(self) -> str:
         return "AudioMatrix"
+
+    def composeSourceUpdateMessage(
+        self, values, sIdx: int = 0, *args
+    ) -> list[tuple[bytes, Iterable]]:
+        osc_pre = args[0]
+
+        return [(osc_pre, [sIdx, values])]
+
+    def sourceRenderGainChanged(self, source_idx, render_idx):
+        log.info(f"source gain changed: {source_idx}, {render_idx}")
+        if render_idx in self.gain_paths:
+            for path in self.gain_paths[render_idx]:
+                self.updateStack[source_idx].add(
+                    (
+                        partial(self.sources[source_idx].getRenderGain, render_idx),
+                        (path,),
+                    )
+                )
+                self.sourceChanged(source_idx)
 
 
 class Panoramix(SpatialRenderer):
@@ -406,7 +455,9 @@ class Panoramix(SpatialRenderer):
     def myType(self) -> str:
         return "Panoramix CAREFUL NOT REALLY IMPLEMENTED"
 
-    def composeSourceUpdateMessage(self, values, sIdx: int = 0, *args) -> [(bytes, [])]:
+    def composeSourceUpdateMessage(
+        self, values, sIdx: int = 0, *args
+    ) -> list[tuple[bytes, Iterable]]:
         # msgs = []
         sobject = self.sources[sIdx]
         position = sobject.getPosition(self.posFormat)
@@ -423,7 +474,7 @@ class IemMultiencoder(SpatialRenderer):
         # kwargs[skc.posformat] = skc.aed
         super(IemMultiencoder, self).__init__(**kwargs)
 
-        self.posAddrs = [{}] * self.numberOfSources
+        self.posAddrs: list = []
         for i in range(self.numberOfSources):
             for kk in skc.posformat[self.posFormat][1]:
                 # TODO: Check if the right strings
@@ -435,8 +486,10 @@ class IemMultiencoder(SpatialRenderer):
     def myType(self) -> str:
         return "IEM Multiencoder, NOT IMPLEMENTED"
 
-    def composeSourceUpdateMessage(self, values, sIdx: int = 0, *args) -> [(bytes, [])]:
-        pass
+    def composeSourceUpdateMessage(
+        self, values, sIdx: int = 0, *args
+    ) -> list[tuple[bytes, Iterable]]:
+        return []
 
 
 class SuperColliderEngine(SpatialRenderer):
@@ -455,7 +508,9 @@ class SuperColliderEngine(SpatialRenderer):
 
         self.debugPrefix = "/dSuperCollider"
 
-    def composeSourceUpdateMessage(self, values, sIdx: int = 0, *args) -> [(bytes, [])]:
+    def composeSourceUpdateMessage(
+        self, values, sIdx: int = 0, *args
+    ) -> list[tuple[bytes, Iterable]]:
         osc_pre = args[0]
         return [(osc_pre, [sIdx, *values])]
         # sobject = self.sources[source_idx]
@@ -498,7 +553,7 @@ class ViewClient(SpatialRenderer):
 
         # self.idxSourceOscPreAttri
 
-        self.pingTimer: Timer = None
+        self.pingTimer: Timer | None = None
 
     def createOscPrefixes(self):
         for i in range(self.numberOfSources):
@@ -588,7 +643,9 @@ class ViewClient(SpatialRenderer):
         #     self.updateStack[source_idx].add((partial(self.sources[source_idx].getRenderGain, render_idx), (self.oscpre_renderGain, render_idx)))
         self.sourceChanged(source_idx)
 
-    def composeSourceUpdateMessage(self, values, sIdx: int = 0, *args) -> [(bytes, [])]:
+    def composeSourceUpdateMessage(
+        self, values, sIdx: int = 0, *args
+    ) -> list[tuple[bytes, Iterable]]:
         if isinstance(values, Iterable):
             return [(args[0], values)]
         else:
@@ -691,7 +748,9 @@ class Oscar(SpatialRenderer):
         )
         self.sourceChanged(source_idx)
 
-    def composeSourceUpdateMessage(self, values, sIdx: int = 0, *args) -> [(bytes, [])]:
+    def composeSourceUpdateMessage(
+        self, values, sIdx: int = 0, *args
+    ) -> list[tuple[bytes, Iterable]]:
         osc_pre = args[0]
         return [(osc_pre, [values])]
 
@@ -722,7 +781,9 @@ class SeamlessPlugin(SpatialRenderer):
 
         self.debugPrefix = "/dSeamlessPlugin"
 
-    def composeSourceUpdateMessage(self, values, sIdx: int = 0, *args) -> [(bytes, [])]:
+    def composeSourceUpdateMessage(
+        self, values, sIdx: int = 0, *args
+    ) -> list[tuple[bytes, Iterable]]:
         osc_pre = args[0]
         if osc_pre == self.oscAddrs["renderGain"]:
             return [(osc_pre, [sIdx + 1, args[1], values])]
