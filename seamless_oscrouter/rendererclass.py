@@ -1,4 +1,5 @@
 # import renderer_config as reconf
+from numpy import iterable
 from seamless_oscrouter.soundobjectclass import SoundObject
 import seamless_oscrouter.str_keys_conventions as skc
 import seamless_oscrouter.conversionsTools as ct
@@ -60,35 +61,34 @@ class Renderer(object):
         self.sourceAttributes = sourceattributes
 
         # check if addresses are defined as an array
+        self.addresses: list[tuple[str, int]] = []
         if addresses is None:
-            self.ip_address = [ip_address]
-            self.port = [int(port)]
+            self.addresses.append((ip_address, int(port)))
         else:
-            self.ip_address = []
-            self.port = []
             for address in addresses:
                 try:
-                    self.ip_address.append(address["ip_address"])
-                    self.port.append(address["port"])
-                except:
+                    address_tuple = (address["ip_address"], address["port"])
+                    self.addresses.append(address_tuple)
+                except KeyError:
                     raise RendererException("Invalid Address")
 
         self.updateIntervall = int(updateintervall) / 1000
 
         self.source_needs_update: list[bool] = [False] * self.numberOfSources
         self.source_getting_update: list[bool] = [False] * self.numberOfSources
+
+        # update stack contains sets of tuples of functions and osc_paths
+        # sets are used, so each source is updated only once during the update process
         self.updateStack: list[set[tuple[Callable, bytes]]] = [
-            set()
-        ]  # Tuple (<getValueFromSource function> </osctring>)
-        for s in range(1, self.numberOfSources):
-            self.updateStack.append(set())
+            set() for _ in range(self.numberOfSources)
+        ]
 
         self.debugPrefix = "/genericRenderer"
         self.oscPre = ("/source/" + self.posFormat).encode()
 
-        self.toRender: list[OSCClient] = []
-        for idx, ip in enumerate(self.ip_address):
-            self.toRender.append(OSCClient(ip, self.port[0], encoding="utf8"))
+        self.receivers: list[OSCClient] = []
+        for ip, port in self.addresses:
+            self.receivers.append(OSCClient(ip, port, encoding="utf8"))
 
         self.isDataClient = False
 
@@ -98,10 +98,8 @@ class Renderer(object):
         info = [
             self.myType(),
             "\n",
-            "address:",
-            self.ip_address,
-            "port:",
-            self.port,
+            "addresses:",
+            self.addresses,
             "\n",
             "listening to format",
             self.posFormat,
@@ -114,7 +112,7 @@ class Renderer(object):
         return "basic Rendererclass: abstract class, doesnt listen"
 
     def addDestination(self, ip: str, port: int):
-        self.toRender.append(OSCClient(ip, port, encoding="utf8"))
+        self.receivers.append(OSCClient(ip, port, encoding="utf8"))
 
         log.debug(self.myType(), "added destination", ip, str(port))
 
@@ -151,10 +149,10 @@ class Renderer(object):
             msgs (list(list)): list of messages
         """
         for msg in msgs:
-            for toRenderClient in self.toRender:
+            for receiversClient in self.receivers:
                 try:
                     oscArgs = msg[1]
-                    toRenderClient.send_message(msg[0], oscArgs)
+                    receiversClient.send_message(msg[0], oscArgs)
 
                 except Exception as e:
                     log.warn(f"Exception while sending: {e}")
@@ -164,9 +162,9 @@ class Renderer(object):
                     debugOsc = (
                         self.debugPrefix
                         + "/"
-                        + toRenderClient.address
+                        + receiversClient.address
                         + ":"
-                        + str(toRenderClient.port)
+                        + str(receiversClient.port)
                         + msg[0].decode()
                     ).encode()
                     try:
@@ -321,9 +319,7 @@ class Audiorouter(Renderer):
             self.myType(),
             "\n",
             "address:",
-            self.ip_address,
-            "port:",
-            self.port,
+            self.addresses,
             "\n",
             "listening to format",
             "send to render gains",
@@ -399,6 +395,9 @@ class AudioMatrix(Renderer):
         super().__init__(**kwargs)
         self.debugPrefix = "/dAudioMatrix"
         self.gain_paths: dict[int, list[bytes]] = {}
+        self.pos_paths: list[tuple[bytes, str]] = []
+
+        # this dict is used to translate between render unit index and render unit name
         self.render_unit_indices = {}
 
         # prepare gain path with all render unit indices
@@ -409,11 +408,18 @@ class AudioMatrix(Renderer):
 
         for path in paths:
             osc_path: str = path["path"]
-            renderer = path["renderer"]
-            renderer_index = self.render_unit_indices[renderer]
-            renderer_type = path["type"]
-            if renderer_type == "gain":
+            path_type = path["type"]
+
+            if path_type == "gain":
+                renderer = path["renderer"]
+                renderer_index = self.render_unit_indices[renderer]
                 self.gain_paths[renderer_index].append(osc_path.encode())
+            elif path_type in ["position", "pos"]:
+                try:
+                    coord_fmt = skc.CoordFormats(path["format"]).value
+                except:
+                    coord_fmt = skc.CoordFormats("xyz").value
+                self.pos_paths.append((osc_path.encode(), coord_fmt))
 
         log.debug("Audio Matrix initialized")
 
@@ -424,8 +430,9 @@ class AudioMatrix(Renderer):
         self, values, sIdx: int = 0, *args
     ) -> list[tuple[bytes, Iterable]]:
         osc_pre = args[0]
-
-        return [(osc_pre, [sIdx, values])]
+        if not iterable(values):
+            values = [values]
+        return [(osc_pre, [sIdx, *values])]
 
     def sourceRenderGainChanged(self, source_idx, render_idx):
         log.info(f"source gain changed: {source_idx}, {render_idx}")
@@ -438,6 +445,19 @@ class AudioMatrix(Renderer):
                     )
                 )
                 self.sourceChanged(source_idx)
+
+    def sourcePositionChanged(self, source_idx):
+        log.info(f"source position update {source_idx}")
+        for path, coord_fmt in self.pos_paths:
+            self.updateStack[source_idx].add(
+                (
+                    (
+                        partial(self.sources[source_idx].getPosition, coord_fmt),
+                        (path,),
+                    )
+                )
+            )
+            self.sourceChanged(source_idx)
 
 
 class Panoramix(SpatialRenderer):
@@ -591,9 +611,9 @@ class ViewClient(SpatialRenderer):
         self.pingTimer = Timer(2.0, partial(self.checkAlive, deleteClient))
 
         if self.pingCounter < 6:
-            # self.toRender[0].send_message(b'/oscrouter/ping', [self.globalConfig['inputport_settings']])
+            # self.receivers[0].send_message(b'/oscrouter/ping', [self.globalConfig['inputport_settings']])
             try:
-                self.toRender[0].send_message(
+                self.receivers[0].send_message(
                     b"/oscrouter/ping", [self.globalConfig["inputport_settings"]]
                 )  # , self.alias
             except:

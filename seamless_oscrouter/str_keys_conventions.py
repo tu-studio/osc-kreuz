@@ -135,6 +135,57 @@ class sControl_state(Enum):
 #         planewave: planewave,
 #         doppler: doppler
 # }
+
+
+class OscPathType(Enum):
+    Position = 1
+    Properties = 2
+    Gain = 3
+
+
+osc_paths = {
+    OscPathType.Position: {
+        "base": [
+            "/source/{val}",
+            "/source/pos/{val}",
+            "/source/position/{val}",
+        ],
+        "extended": [
+            "/source/{idx}/{val}",
+            "/source/{idx}/pos/{val}",
+            "/source/{idx}/position/{val}",
+        ],
+    },
+    OscPathType.Properties: {
+        "base": ["/source/{val}"],
+        "extended": ["/source/{idx}/{val}"],
+    },
+    OscPathType.Gain: {
+        "base": [
+            "/source/send/{val}",
+            "/source/send/{val}/gain",
+            "/send/{val}",
+            "/send/{val}/gain",
+            "/source/{val}",
+            "/source/{val}/gain",
+        ],
+        "extended": [
+            "/source/{idx}/send/{val}",
+            "/source/{idx}/send/{val}/gain",
+            "/send/{idx}/{val}",
+            "/send/{idx}/{val}/gain",
+            "/source/{idx}/{val}",
+            "/source/{idx}/{val}/gain",
+        ],
+    },
+}
+
+osc_aliases = {
+    "ambi": ["ambi", "ambisonics"],
+    "wfs": ["wfs", "wavefieldsynthesis"],
+    "reverb": ["reverb", "rev"],
+}
+
 knownAttributes = {planewave, doppler}
 
 

@@ -7,6 +7,7 @@ import ipaddress
 import logging
 
 log = logging.getLogger("OSCcomcenter")
+# log = logging.getLogger("main")
 
 
 soundobjects: list[SoundObject] = []
@@ -218,7 +219,7 @@ def oscreceived_verbose(*args):
         setVerbosity(0)
         # verbosity = 0
         # Renderer.setVerbosity(0)
-        print("wrong verbosity argument")
+        log.error("wrong verbosity argument")
         return
 
     if 0 <= vvvv <= 2:
@@ -230,7 +231,40 @@ def oscreceived_verbose(*args):
         setVerbosity(0)
 
 
+def build_osc_paths(
+    osc_path_type: skc.OscPathType, value: str, idx: int | None = None
+) -> list[str]:
+    """Builds a list of all needed osc paths for a given osc path Type and the value.
+    If idx is supplied, the extended path is used. Aliases for the value are handled
+
+    Args:
+        osc_path_type (skc.OscPathType): Osc Path Type
+        value (str): value to be written into the OSC strings.
+        idx (int | None, optional): Index of the source if the extended format should be used. Defaults to None.
+
+    Raises:
+        KeyError: Raised when the Osc Path Type does not exist
+
+    Returns:
+        list[str]: list of OSC path strings
+    """
+    if osc_path_type not in skc.osc_paths:
+        raise KeyError(f"Invalid OSC Path Type: {osc_path_type}")
+    try:
+        aliases = skc.osc_aliases[value]
+    except KeyError:
+        aliases = [value]
+
+    if idx is None:
+        paths = skc.osc_paths[osc_path_type]["base"]
+    else:
+        paths = skc.osc_paths[osc_path_type]["extended"]
+
+    return [path.format(val=alias, idx=idx) for alias in aliases for path in paths]
+
+
 def setupOscBindings():
+    """Sets up all Osc Bindings"""
     setupOscSettingsBindings()
 
     osc_ui_server.listen(
@@ -240,129 +274,59 @@ def setupOscBindings():
         address="0.0.0.0", port=globalconfig[skc.inputport_data], default=True
     )
 
-    for key, item in skc.posformat.items():
+    n_sources = globalconfig["number_sources"]
 
-        for addr in [
-            ("/source/" + key),
-            "/source/pos/" + key,
-            "/source/position/" + key,
-        ]:
+    # Setup OSC Callbacks for positional data
+    for key in skc.posformat.keys():
+
+        for addr in build_osc_paths(skc.OscPathType.Position, key):
             bindToDataAndUiPort(addr, partial(oscreceived_setPosition, key))
 
         if extendedOscInput:
-            for i in range(globalconfig["number_sources"]):
+            for i in range(n_sources):
                 idx = i + 1
-                for addr in [
-                    ("/source/" + str(idx) + "/pos/" + key),
-                    ("/source/" + str(idx) + "/position/" + key),
-                    ("/source/" + str(idx) + "/" + key),
-                ]:
+                for addr in build_osc_paths(skc.OscPathType.Position, key, idx=idx):
                     bindToDataAndUiPort(
                         addr, partial(oscreceived_setPositionForSource, key, i)
                     )
 
+    # Setup OSC for Wonder Attribute Paths
     for key in skc.SourceAttributes:
+        for addr in build_osc_paths(skc.OscPathType.Properties, key.value):
+            bindToDataAndUiPort(addr, partial(oscReceived_setValueForAttribute, key))
 
-        addstring = "/source/" + key.value
-        bindToDataAndUiPort(addstring, partial(oscReceived_setValueForAttribute, key))
-
-        for i in range(globalconfig["number_sources"]):
+        for i in range(n_sources):
             idx = i + 1
-            addstring = "/source/" + str(idx) + "/" + key.value
-            bindToDataAndUiPort(
-                addstring, partial(oscreceived_setValueForSourceForAttribute, i, key)
-            )
+            for addr in build_osc_paths(skc.OscPathType.Properties, key.value, idx):
+                bindToDataAndUiPort(
+                    addr, partial(oscreceived_setValueForSourceForAttribute, i, key)
+                )
 
     # sendgain input
     for spatGAdd in ["/source/send/spatial", "/send/gain", "/source/send"]:
         bindToDataAndUiPort(spatGAdd, partial(oscreceived_setRenderGain))
 
-    if "index_ambi" in globalconfig.keys():
-        rendIdx = int(globalconfig["index_ambi"])
-        for addr in [
-            "/source/send/ambi",
-            "/source/send/ambisonics",
-            "/send/ambisonics",
-            "/send/ambi",
-        ]:
+    # get list of all render units
+    try:
+        render_units = globalconfig["render_units"]
+    except KeyError:
+        render_units = []
+
+    # Setup OSC Callbacks for all render units
+    for rendIdx, render_unit in enumerate(render_units):
+        # get aliases for this render unit, if none exist just use the base name
+
+        # add callback to base paths for all all aliases
+        for addr in build_osc_paths(skc.OscPathType.Gain, render_unit):
             bindToDataAndUiPort(
                 addr, partial(oscreceived_setRenderGainToRenderer, rendIdx)
             )
+
+        # add callback to extended paths
         if extendedOscInput:
-            for i in range(globalconfig["number_sources"]):
+            for i in range(n_sources):
                 idx = i + 1
-                for addr in [
-                    ("/source/" + str(idx) + "/ambi"),
-                    ("/source/" + str(idx) + "/ambisonics"),
-                    ("/source/" + str(idx) + "/send/ambi"),
-                    ("/source/" + str(idx) + "/send/ambisonics"),
-                ]:
-                    bindToDataAndUiPort(
-                        addr,
-                        partial(
-                            oscreceived_setRenderGainForSourceForRenderer, i, rendIdx
-                        ),
-                    )
-
-    if "index_wfs" in globalconfig.keys():
-        rendIdx = int(globalconfig["index_wfs"])
-        for addr in [
-            "/source/send/wfs",
-            "/source/send/wavefieldsynthesis",
-            "/send/wfs",
-            "/send/wavefieldsynthesis",
-        ]:
-            bindToDataAndUiPort(
-                addr,
-                partial(
-                    oscreceived_setRenderGainToRenderer, int(globalconfig["index_wfs"])
-                ),
-            )
-        if extendedOscInput:
-            for i in range(globalconfig["number_sources"]):
-                idx = i + 1
-                for addr in [
-                    ("/source/" + str(idx) + "/wfs"),
-                    ("/source/" + str(idx) + "/wavefieldsynthesis"),
-                    ("/source/" + str(idx) + "/send/wfs"),
-                    ("/source/" + str(idx) + "/send/wavefieldsynthesis"),
-                ]:
-                    bindToDataAndUiPort(
-                        addr,
-                        partial(
-                            oscreceived_setRenderGainForSourceForRenderer, i, rendIdx
-                        ),
-                    )
-
-    if "index_reverb" in globalconfig.keys():
-        rendIdx = int(globalconfig["index_reverb"])
-        for addr in [
-            "/source/send/reverb",
-            "/source/send/rev",
-            "/send/rev",
-            "/send/reverb",
-            "/source/reverb/gain",
-        ]:
-
-            bindToDataAndUiPort(
-                addr,
-                partial(
-                    oscreceived_setRenderGainToRenderer,
-                    int(globalconfig["index_reverb"]),
-                ),
-            )
-        # bindToDataAndUiPort('/source/send/rev', partial(oscreceived_setRenderGainToRenderer, int(globalconfig['index_reverb'])))
-
-        if extendedOscInput:
-            for i in range(globalconfig["number_sources"]):
-                idx = i + 1
-                for addr in [
-                    ("/source/" + str(idx) + "/rev"),
-                    ("/source/" + str(idx) + "/reverb"),
-                    ("/source/" + str(idx) + "/send/rev"),
-                    ("/source/" + str(idx) + "/send/reverb"),
-                    ("/source/" + str(idx) + "/reverb/gain"),
-                ]:
+                for addr in build_osc_paths(skc.OscPathType.Gain, render_unit, idx):
                     bindToDataAndUiPort(
                         addr,
                         partial(
@@ -372,44 +336,47 @@ def setupOscBindings():
 
     directSendAddr = "/source/send/direct"
     bindToDataAndUiPort(directSendAddr, partial(oscreceived_setDirectSend))
-    if extendedOscInput:
-        for i in range(globalconfig["number_sources"]):
-            idx = i + 1
-            for addr in [
-                ("/source/" + str(idx) + "/rendergain"),
-                ("/source/" + str(idx) + "/send/spatial"),
-                ("/source/" + str(idx) + "/spatial"),
-                ("/source/" + str(idx) + "/sendspatial"),
-            ]:
 
-                bindToDataAndUiPort(
-                    addr, partial(oscreceived_setRenderGainForSource, i)
-                )
+    # XXX can this be removed?
+    # if extendedOscInput:
+    #     for i in range(n_sources):
+    #         idx = i + 1
+    #         for addr in [
+    #             ("/source/" + str(idx) + "/rendergain"),
+    #             ("/source/" + str(idx) + "/send/spatial"),
+    #             ("/source/" + str(idx) + "/spatial"),
+    #             ("/source/" + str(idx) + "/sendspatial"),
+    #         ]:
 
-                # TODO fix whatever this is
-                # for j in range(len(renderengineClients)):
-                #     addr2 = addr + "/" + str(j)
-                #     bindToDataAndUiPort(
-                #         addr2,
-                #         partial(oscreceived_setRenderGainForSourceForRenderer, i, j),
-                #     )
+    #             bindToDataAndUiPort(
+    #                 addr, partial(oscreceived_setRenderGainForSource, i)
+    #             )
 
-            for addr in [
-                ("/source/" + str(idx) + "/direct"),
-                ("/source/" + str(idx) + "/directsend"),
-                ("/source/" + str(idx) + "/senddirect"),
-                ("/source/" + str(idx) + "/send/direct"),
-            ]:
-                bindToDataAndUiPort(
-                    addr, partial(oscreceived_setDirectSendForSource, idx)
-                )
+    #             # TODO fix whatever this is
+    #             # This adds additional osc paths for the render engines by index
+    #             # for j in range(len(renderengineClients)):
+    #             #     addr2 = addr + "/" + str(j)
+    #             #     bindToDataAndUiPort(
+    #             #         addr2,
+    #             #         partial(oscreceived_setRenderGainForSourceForRenderer, i, j),
+    #             #     )
 
-                for j in range(globalconfig["number_direct_sends"]):
-                    addr2 = addr + "/" + str(j)
-                    bindToDataAndUiPort(
-                        addr2,
-                        partial(oscreceived_setDirectSendForSourceForChannel, idx, j),
-                    )
+    #         for addr in [
+    #             ("/source/" + str(idx) + "/direct"),
+    #             ("/source/" + str(idx) + "/directsend"),
+    #             ("/source/" + str(idx) + "/senddirect"),
+    #             ("/source/" + str(idx) + "/send/direct"),
+    #         ]:
+    #             bindToDataAndUiPort(
+    #                 addr, partial(oscreceived_setDirectSendForSource, idx)
+    #             )
+
+    #             for j in range(globalconfig["number_direct_sends"]):
+    #                 addr2 = addr + "/" + str(j)
+    #                 bindToDataAndUiPort(
+    #                     addr2,
+    #                     partial(oscreceived_setDirectSendForSourceForChannel, idx, j),
+    #                 )
 
     if verbosity > 2:
         for add in osc_ui_server.addresses:
@@ -418,6 +385,7 @@ def setupOscBindings():
 
 def bindToDataAndUiPort(addr: str, func):
     # dontUseDataPortFlag = bool(globalconfig['data_port_timeout'] == 0)
+    log.debug(f"Adding OSC callback for {addr}")
     addrEnc = addr.encode()
 
     # if verbosity >= 2:
@@ -467,6 +435,7 @@ def directSendLegit(id: int) -> bool:
 
 def oscreceived_setPosition(coordKey, *args, fromUi=True):
     sIdx = args[0] - 1
+    log.info(f"osc pos received args{args}")
     if sourceLegit(sIdx):
         sIdx = int(sIdx)
         oscreceived_setPositionForSource(coordKey, sIdx, *args[1:], fromUi=fromUi)
