@@ -412,7 +412,7 @@ def sourceLegit(id: int) -> bool:
 
 
 def renderIndexLegit(id: int) -> bool:
-    indexInRange = id in range(globalconfig["numberofrenderengines"])
+    indexInRange = id in range(globalconfig["n_renderengines"])
     if verbosity > 0:
         if not indexInRange:
             if not type(id) == int:

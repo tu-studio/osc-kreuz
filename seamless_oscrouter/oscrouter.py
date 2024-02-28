@@ -30,15 +30,16 @@ default_config_file_path = "seamless-core/oscrouter/oscRouterConfig.yml"
 
 def debug_prints(globalconfig, extendedOscInput, verbose):
     log.debug("max number of sources is set to %s", str(globalconfig["number_sources"]))
-    log.debug(
-        "number of rendering units is %s", str(globalconfig["numberofrenderengines"])
-    )
-    if "index_ambi" in globalconfig.keys():
-        log.debug("ambisonics index: %s", globalconfig["index_ambi"])
-    if "index_wfs" in globalconfig.keys():
-        log.debug("wfs index: %s", globalconfig["index_wfs"])
-    if "index_reverb" in globalconfig.keys():
-        log.debug("reverb index: %s", globalconfig["index_reverb"])
+    log.debug("number of rendering units is %s", str(globalconfig["n_renderengines"]))
+
+    try:
+        render_units = globalconfig["render_units"]
+    except KeyError:
+        render_units = []
+
+    for key in ["ambi", "wfs", "reverb"]:
+        if key in render_units:
+            log.debug(f"{key} index: {render_units.index(key)}")
 
     log.debug("UI listenport: %s", globalconfig[skc.inputport_ui])
     log.debug("DATA listenport (for automation): %s", globalconfig[skc.inputport_data])
@@ -119,11 +120,16 @@ def main(config_path, oscdebug, verbose):
 
     # prepare globalconfig
     globalconfig = config["globalconfig"]
-    globalconfig["numberofrenderengines"] = config["globalconfig"]["number_renderunits"]
+
+    try:
+        n_renderunits = len(globalconfig["render_units"])
+    except KeyError:
+        n_renderunits = 0
+    globalconfig["n_renderengines"] = n_renderunits
 
     # set global config in objects
     SoundObject.readGlobalConfig(globalconfig)
-    SoundObject.number_renderer = int(globalconfig["numberofrenderengines"])
+    SoundObject.number_renderer = n_renderunits
     Renderer.globalConfig = globalconfig
     osccomcenter.globalconfig = globalconfig
 

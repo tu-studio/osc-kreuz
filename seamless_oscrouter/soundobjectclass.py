@@ -4,8 +4,9 @@ import seamless_oscrouter.conversionsTools as ct
 from functools import partial
 from time import time
 
-_tt = 'time'
-_uiBlock = '_uiDidBlock'
+_tt = "time"
+_uiBlock = "_uiDidBlock"
+
 
 class SoundObject(object):
 
@@ -21,71 +22,67 @@ class SoundObject(object):
     @classmethod
     def readGlobalConfig(cls, config: dict):
         cls.globalConfig = config
-        cls.preferUi = bool(not config['data_port_timeout'] == 0)
-        cls.dataPortTimeOut = float(config['data_port_timeout'])
+        cls.preferUi = bool(not config["data_port_timeout"] == 0)
+        cls.dataPortTimeOut = float(config["data_port_timeout"])
         # cls.number_renderer =
-
 
     def __init__(self, objectID=0):
 
         self.objectID = objectID
 
-        self._position: [str, np.float32] = {
-            skc.x: ct.f32(0.),
-            skc.y: ct.f32(1.),
-            skc.z: ct.f32(0.),
-            skc.azim: ct.f32(0.),
-            skc.elev: ct.f32(0.),
-            skc.dist: ct.f32(1.),
-            skc.angle: ct.f32(0.),
-            skc.nx: ct.f32(0.),
-            skc.ny: ct.f32(1.),
-            skc.nz: ct.f32(0.),
-            skc.az_rad: ct.f32(0.),
-            skc.el_rad: ct.f32(0.)
+        self._position: dict[str, np.float32] = {
+            skc.x: ct.f32(0.0),
+            skc.y: ct.f32(1.0),
+            skc.z: ct.f32(0.0),
+            skc.azim: ct.f32(0.0),
+            skc.elev: ct.f32(0.0),
+            skc.dist: ct.f32(1.0),
+            skc.angle: ct.f32(0.0),
+            skc.nx: ct.f32(0.0),
+            skc.ny: ct.f32(1.0),
+            skc.nz: ct.f32(0.0),
+            skc.az_rad: ct.f32(0.0),
+            skc.el_rad: ct.f32(0.0),
         }
 
         self._sourceattributes = {
             skc.SourceAttributes.planewave: 0,
-            skc.SourceAttributes.doppler: 0
+            skc.SourceAttributes.doppler: 0,
         }
         self._changedaAttributes: set = set()
 
-        self._torendererSends = [0.] * self.number_renderer
+        self._torendererSends = [np.float32(0.0) for _ in range(self.number_renderer)]
         self._changedSends: set = set()
-        self._directSends = [0.] * self.globalConfig['number_direct_sends']
+        self._directSends = [0.0] * self.globalConfig["number_direct_sends"]
         self._changedDirSends = set()
-
 
         self._positionIsSet = {
             skc.polar: False,
             skc.cartesian: True,
             skc.normcartesian: True,
-            skc.polar_rad: False
+            skc.polar_rad: False,
         }
-        self._lastUpdateKey = ''
-
+        self._lastUpdateKey = ""
 
         self._contState = skc.sControl_state.auto_switch_control
 
-
         self.uiBlockingDict = {}
-        self.uiBlockingDict['position'] = self.createBlockingDict()
+        self.uiBlockingDict["position"] = self.createBlockingDict()
         #     {
         #     _tt: time(),
         #     _uiBlock: False
         # }
         # self.t_position = time()
         # self._uiDidSetPosition = False
-        self.uiBlockingDict['attribute'] = self.createBlockingDict()
+        self.uiBlockingDict["attribute"] = self.createBlockingDict()
         # self.t_setAttribute = time()
         # self._uiDidSetAttribute = False
-        self.uiBlockingDict['rendergain'] = []
+        self.uiBlockingDict["rendergain"] = []
         for i in range(self.number_renderer):
-            self.uiBlockingDict['rendergain'].append(self.createBlockingDict())
-        self.uiBlockingDict['directsend'] = []
-        for i in range(self.globalConfig['number_direct_sends']):
-            self.uiBlockingDict['directsend'].append(self.createBlockingDict())
+            self.uiBlockingDict["rendergain"].append(self.createBlockingDict())
+        self.uiBlockingDict["directsend"] = []
+        for i in range(self.globalConfig["number_direct_sends"]):
+            self.uiBlockingDict["directsend"].append(self.createBlockingDict())
 
         # self.t_renderGain = [time()] * self.number_renderer
 
@@ -93,17 +90,15 @@ class SoundObject(object):
         # self.t_directSend = [time()] * self.globalConfig['number_direct_sends']
         # self._uiDidSetDirectSend = [False] * self.globalConfig['number_direct_sends']
 
-    def createBlockingDict(self)->dict:
-        return {_tt: time(),
-                _uiBlock: False}
+    def createBlockingDict(self) -> dict:
+        return {_tt: time(), _uiBlock: False}
 
-    def _getPositionValuesForKey(self, key: skc.CoordFormats) -> []:
+    def _getPositionValuesForKey(self, key: skc.CoordFormats) -> list[np.float32]:
         vals = []
         for kk in skc.posformat[key.value][1]:
             vals.append(self._position[kk])
 
         return vals
-
 
     def setControlState(self, state: skc.sControl_state):
         self._contState = state
@@ -130,27 +125,33 @@ class SoundObject(object):
             _convert = True
 
         if _convert:
-            statusTupel = (self._positionIsSet[skc.polar], self._positionIsSet[skc.cartesian], self._positionIsSet[skc.normcartesian])
+            statusTupel = (
+                self._positionIsSet[skc.polar],
+                self._positionIsSet[skc.cartesian],
+                self._positionIsSet[skc.normcartesian],
+            )
 
             conversionMap = {
                 skc.polar: {
                     (False, True, True): (ct.conv_ncart2pol, skc.CoordFormats.nxyzd),
                     (False, True, False): (ct.conv_cart2pol, skc.CoordFormats.xyz),
-                    (False, False, True): (ct.conv_ncart2pol, skc.CoordFormats.nxyzd)
+                    (False, False, True): (ct.conv_ncart2pol, skc.CoordFormats.nxyzd),
                 },
                 skc.cartesian: {
                     (True, False, True): (ct.conv_ncart2cart, skc.CoordFormats.nxyzd),
                     (True, False, False): (ct.conv_pol2cart, skc.CoordFormats.aed),
-                    (False, False, True): (ct.conv_ncart2cart, skc.CoordFormats.nxyzd)
+                    (False, False, True): (ct.conv_ncart2cart, skc.CoordFormats.nxyzd),
                 },
                 skc.normcartesian: {
                     (True, True, False): (ct.conv_cart2ncart, skc.CoordFormats.xyz),
                     (True, False, False): (ct.conv_pol2ncart, skc.CoordFormats.aed),
-                    (False, True, False): (ct.conv_cart2ncart, skc.CoordFormats.xyz)
-                }
+                    (False, True, False): (ct.conv_cart2ncart, skc.CoordFormats.xyz),
+                },
             }
             convert_metadata = conversionMap[updateFormat][statusTupel]
-            conversion = partial(convert_metadata[0])#, skc.posformat[convert_metadata[1]])
+            conversion = partial(
+                convert_metadata[0]
+            )  # , skc.posformat[convert_metadata[1]])
 
             updatedCoo = conversion(*self._getPositionValuesForKey(convert_metadata[1]))
             for idx, coo in enumerate(skc.fullformat[updateFormat]):
@@ -159,7 +160,11 @@ class SoundObject(object):
         if _calcRad:
             # self._position[skc.az_rad] = ct.deg2rad(self._position[skc.azim])
             # self._position[skc.el_rad] = ct.deg2rad(self._position[skc.elev])
-            [self._position[skc.az_rad], self._position[skc.el_rad]] = ct.convert_deg_angleToRad_correctMath(self._position[skc.azim], self._position[skc.elev])
+            [self._position[skc.az_rad], self._position[skc.el_rad]] = (
+                ct.convert_deg_angleToRad_correctMath(
+                    self._position[skc.azim], self._position[skc.elev]
+                )
+            )
             self._positionIsSet[skc.polar_rad] = True
         elif _calcDeg:
             self._position[skc.azim] = ct.rad2deg(self._position[skc.az_rad])
@@ -167,14 +172,10 @@ class SoundObject(object):
 
         self._positionIsSet[updateFormat] = True
 
+    def setPosition(self, coordinate_key: str, *values, fromUi: bool = True) -> bool:
 
-
-    def setPosition(self, coordinate_key: str, *values, fromUi:bool=True) -> bool:
-
-        if not self.shouldProcessInput(self.uiBlockingDict['position'], fromUi):
+        if not self.shouldProcessInput(self.uiBlockingDict["position"], fromUi):
             return False
-
-
 
         # if fromUi:
         #     self.gotUiInput(self.uiBlockDict['position'])
@@ -195,7 +196,10 @@ class SoundObject(object):
         coordinateType = skc.posformat[coordinate_key][0]
         sthChanged = False
 
-        if not self._positionIsSet[coordinateType] and not skc.posformat[coordinate_key][2]:
+        if (
+            not self._positionIsSet[coordinateType]
+            and not skc.posformat[coordinate_key][2]
+        ):
             self.updateCoordinateFormat(coordinateType)
             sthChanged = True
 
@@ -204,13 +208,13 @@ class SoundObject(object):
 
         self._lastUpdateKey = coordinate_key
 
-        #TODO:copy old position
+        # TODO:copy old position
         # print(len(values), values)
         # here the Position is set
         for idx, key in enumerate(skc.posformat[coordinate_key][1]):
             newValue = ct.f32(values[idx])
             if key == skc.dist:
-                newValue = np.maximum(self.globalConfig['min_dist'], newValue)
+                newValue = np.maximum(self.globalConfig["min_dist"], newValue)
             if self.globalConfig[skc.send_changes_only]:
                 if not newValue == self._position[key]:
                     sthChanged = True
@@ -219,14 +223,12 @@ class SoundObject(object):
                 self._position[key] = newValue
                 sthChanged = True
 
-
             # self._position[key] = ct.f32(values[idx])
 
         self._positionIsSet[coordinateType] = True
 
-        #TODO: compare new Position with old position for return
+        # TODO: compare new Position with old position for return
         return sthChanged
-
 
     # def setPositionFromAutomation(self, coordinate_key: str, values) -> bool:
     #
@@ -254,21 +256,27 @@ class SoundObject(object):
     #     else:
     #         return False
 
-
-
     def getSingleValueUpdate(self, keys):
         if self._lastUpdateKey in keys:
             return (self._lastUpdateKey, self._position[self._lastUpdateKey])
         else:
             return False
 
-    def getPosition(self, pos_key) -> [float]:
+    def getPosition(self, pos_key: str) -> list[float]:
+        """Get Position of this sound object in the format specified in pos_key
+
+        Args:
+            pos_key (str): str key of the desired position format
+
+        Returns:
+            list[float]: desired coordinates in a list. ATTENTION: If only one coordinate is requested, it is instead returned as a float.
+        """
         coordinateType = skc.posformat[pos_key][0]
 
         if not self._positionIsSet[coordinateType]:
             self.updateCoordinateFormat(coordinateType)
 
-        coords = [] # np.array([], dtype=np.float32)
+        coords = []  # np.array([], dtype=np.float32)
         for key in skc.posformat[pos_key][1]:
             coords.append(float(self._position[key]))
         # float_coords = coords.
@@ -277,10 +285,9 @@ class SoundObject(object):
         else:
             return coords
 
+    def setAttribute(self, attribute, value, fromUi: bool = True) -> bool:
 
-    def setAttribute(self, attribute, value, fromUi:bool=True) -> bool:
-
-        if not self.shouldProcessInput(self.uiBlockingDict['attribute'], fromUi):
+        if not self.shouldProcessInput(self.uiBlockingDict["attribute"], fromUi):
             return False
 
         # if self.preferUi:
@@ -293,21 +300,20 @@ class SoundObject(object):
         #         self.t_position = time()
         #         self._uiDidSetAttribute = True
 
-
         if not self._sourceattributes[attribute] == value:
             self._sourceattributes[attribute] = value
             return True
         else:
             return False
 
-
-    def getAttribute(self, attribute: skc.SourceAttributes) -> any:
+    def getAttribute(self, attribute: skc.SourceAttributes):
         return self._sourceattributes[attribute]
 
+    def setRendererGain(self, rendIdx: int, gain: float, fromUi: bool = True) -> bool:
 
-    def setRendererGain(self, rendIdx: int, gain: float, fromUi:bool=True) -> bool:
-
-        if not self.shouldProcessInput(self.uiBlockingDict['rendergain'][rendIdx], fromUi):
+        if not self.shouldProcessInput(
+            self.uiBlockingDict["rendergain"][rendIdx], fromUi
+        ):
             return False
 
         # if self.preferUi:
@@ -330,10 +336,11 @@ class SoundObject(object):
         # self._changedSends.add(rendIdx)
         return True
 
-
-    def setDirectSend(self, directIdx: int, gain: float, fromUi:bool=True) -> bool:
-        #TODO: replace the fromUi thing with a function
-        if not self.shouldProcessInput(self.uiBlockingDict['directsend'][directIdx], fromUi):
+    def setDirectSend(self, directIdx: int, gain: float, fromUi: bool = True) -> bool:
+        # TODO: replace the fromUi thing with a function
+        if not self.shouldProcessInput(
+            self.uiBlockingDict["directsend"][directIdx], fromUi
+        ):
             return False
 
         # if self.preferUi:
@@ -356,26 +363,29 @@ class SoundObject(object):
         # self._changedDirSends.add(directIdx)
         return True
 
-
     def checkIsBlocked(self, *args):
         pass
 
     def getBoolAndTime(self, *args):
         pass
 
-    def getAllRendererGains(self) -> [float]:
+    def getAllRendererGains(self) -> list[np.float32]:
         return self._torendererSends
 
-    def getRenderGain(self, rIdx:int) -> float:
+    def getRenderGain(self, rIdx: int) -> float:
         return float(self._torendererSends[rIdx])
 
-    def getAllDirectSends(self) -> [float]:
+    def getAllDirectSends(self) -> list[float]:
         return self._directSends
 
-    def getDirectSend(self, cIdx:int) -> float:
+    def getDirectSend(self, cIdx: int) -> float:
         return float(self._directSends[cIdx])
 
-    def shouldProcessInput(self, blockDict:dict, fromUi:bool=True, ) -> bool:
+    def shouldProcessInput(
+        self,
+        blockDict: dict,
+        fromUi: bool = True,
+    ) -> bool:
         if fromUi:
             self.gotUiInput(blockDict)
             return True
@@ -384,15 +394,14 @@ class SoundObject(object):
         else:
             return True
 
-    def gotUiInput(self, blockDict:dict):
+    def gotUiInput(self, blockDict: dict):
         blockDict[_uiBlock] = True
         blockDict[_tt] = time()
 
-    def dataPortStillBlocked(self, blockDict:dict) -> bool:
+    def dataPortStillBlocked(self, blockDict: dict) -> bool:
         if blockDict[_uiBlock]:
             if time() - blockDict[_tt] > self.dataPortTimeOut:
                 blockDict[_uiBlock] = False
-
 
         return blockDict[_uiBlock]
 
@@ -414,6 +423,7 @@ class SoundObject(object):
     #     return msgs
     # def getChangedAttributes(self, attribute, value):
     #     pass
+
 
 # does nothing for now
 class LinkedObject(object):

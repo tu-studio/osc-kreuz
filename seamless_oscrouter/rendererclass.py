@@ -24,6 +24,18 @@ class RendererException(Exception):
     pass
 
 
+class Update:
+    def __init__(self, callback, args, path):
+        pass
+
+    def execute(self):
+        pass
+
+    def __eq__(self, __value: object) -> bool:
+        # check that callback, path and args are the same, and that the type is right
+        return False
+
+
 class Renderer(object):
 
     numberOfSources = 64
@@ -585,21 +597,27 @@ class ViewClient(SpatialRenderer):
                 _aDic[attr] = "/source/{}/{}".format(i + 1, attr).encode()
 
             self.idxSourceOscPreAttri[i] = _aDic
-            renderList = [b""] * self.globalConfig["number_renderunits"]
+
+            try:
+                render_units = self.globalConfig["render_units"]
+            except KeyError:
+                render_units = []
+
+            renderList = [b""] * self.globalConfig["n_renderengines"]
             if (
-                "index_ambi" in self.globalConfig.keys()
-                and "index_wfs" in self.globalConfig.keys()
-                and "index_reverb" in self.globalConfig.keys()
+                "ambi" in render_units
+                and "wfs" in render_units
+                and "reverb" in render_units
             ):
-                renderList[self.globalConfig["index_ambi"]] = "/source/{}/ambi".format(
+                renderList[render_units.index("ambi")] = "/source/{}/ambi".format(
                     i + 1
                 ).encode()
-                renderList[self.globalConfig["index_wfs"]] = "/source/{}/wfs".format(
+                renderList[render_units.index("wfs")] = "/source/{}/wfs".format(
                     i + 1
                 ).encode()
-                renderList[self.globalConfig["index_reverb"]] = (
-                    "/source/{}/reverb".format(i + 1).encode()
-                )
+                renderList[render_units.index("reverb")] = "/source/{}/reverb".format(
+                    i + 1
+                ).encode()
             else:
                 for j in range(self.globalConfig["number_renderunits"]):
                     self.idxSourceOscPreRender[i][j] = "/source/{}/send/{}".format(
@@ -709,7 +727,7 @@ class Oscar(SpatialRenderer):
             self.oscAttrPre.append(attrDic)
 
             renderGainOscs = []
-            for rId in range(self.globalConfig["numberofrenderengines"]):
+            for rId in range(self.globalConfig["n_renderengines"]):
                 riOsc = "/source/" + str(i + 1) + "/render/" + str(rId)
                 renderGainOscs.append(riOsc.encode())
             self.oscRenderPre.append(renderGainOscs)
