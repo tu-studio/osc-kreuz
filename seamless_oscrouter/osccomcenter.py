@@ -293,6 +293,7 @@ def setupOscBindings():
     # Setup OSC for Wonder Attribute Paths
     for key in skc.SourceAttributes:
         for addr in build_osc_paths(skc.OscPathType.Properties, key.value):
+            log.info(f"WFS Attr path: {addr}")
             bindToDataAndUiPort(addr, partial(oscReceived_setValueForAttribute, key))
 
         for i in range(n_sources):
@@ -543,11 +544,6 @@ def oscreceived_setValueForSourceForAttribute(
         notifyRenderClientsForUpdate(
             "sourceAttributeChanged", sIdx, attribute, fromUi=fromUi
         )
-        # notifyRenderForAttributeChange(sIdx, attribute, fromUi)
-
-
-# def notifyRenderForAttributeChange(sIdx:int, attribute:skc.SourceAttributes, fromUi:bool=True):
-#     p
 
 
 def notifyRenderClientsForUpdate(updateFunction: str, *args, fromUi: bool = True):

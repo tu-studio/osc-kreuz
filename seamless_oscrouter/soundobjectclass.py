@@ -48,6 +48,7 @@ class SoundObject(object):
         self._sourceattributes = {
             skc.SourceAttributes.planewave: 0,
             skc.SourceAttributes.doppler: 0,
+            skc.SourceAttributes.angle: 0.0,
         }
         self._changedaAttributes: set = set()
 

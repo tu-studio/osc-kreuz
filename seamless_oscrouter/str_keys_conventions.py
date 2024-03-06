@@ -58,20 +58,7 @@ source_attributes = "sourceattributes"
 doppler = "doppler"
 plane = "planewave"
 planewave = "planewave"
-
-source_index = "source_index"
-
-
-ip_address = "ip-address"
-port_address = "port-address"
-max_update_rate = "max_update_rate"  # in milliseconds between updates
-osc_patterns = "osc_patterns"
-sourcespecific_osc_addstr = (
-    "sourcespecific_osc"  # True if sourceindex is part of address string
-)
-append_to_position = "append_to_position"
-source_offset = "sourfce_offset"
-transform_for_position = "transform_for_position"
+angle = "angle"
 
 
 posformat = {
@@ -131,12 +118,6 @@ class sControl_state(Enum):
     auto_switch_control = np.ubyte(0)
 
 
-# sourceAttributes: dict = {
-#         planewave: planewave,
-#         doppler: doppler
-# }
-
-
 class OscPathType(Enum):
     Position = 1
     Properties = 2
@@ -186,12 +167,13 @@ osc_aliases = {
     "reverb": ["reverb", "rev"],
 }
 
-knownAttributes = {planewave, doppler}
+knownAttributes = {planewave, doppler, angle}
 
 
 class SourceAttributes(Enum):
     planewave = planewave
     doppler = doppler
+    angle = angle
 
 
 class CoordFormats(Enum):
