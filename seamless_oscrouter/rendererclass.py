@@ -60,8 +60,8 @@ class Renderer(object):
         self,
         dataformat=skc.xyz,
         updateintervall=10,
-        ip_address="127.0.0.1",
-        addresses: list[dict] | None = None,
+        hostname="127.0.0.1",
+        hosts: list[dict] | None = None,
         port=4002,
         sourceattributes=(),
         indexAsValue=0,  # XXX unused
@@ -72,17 +72,17 @@ class Renderer(object):
         self.validSinglePosKeys = {}
         self.sourceAttributes = sourceattributes
 
-        # check if addresses are defined as an array
-        self.addresses: list[tuple[str, int]] = []
-        if addresses is None:
-            self.addresses.append((ip_address, int(port)))
+        # check if hosts are defined as an array
+        self.hosts: list[tuple[str, int]] = []
+        if hosts is None:
+            self.hosts.append((hostname, int(port)))
         else:
-            for address in addresses:
+            for host in hosts:
                 try:
-                    address_tuple = (address["ip_address"], address["port"])
-                    self.addresses.append(address_tuple)
+                    host_tuple = (host["hostname"], host["port"])
+                    self.hosts.append(host_tuple)
                 except KeyError:
-                    raise RendererException("Invalid Address")
+                    raise RendererException("Invalid Host")
 
         self.updateIntervall = int(updateintervall) / 1000
 
@@ -99,7 +99,7 @@ class Renderer(object):
         self.oscPre = ("/source/" + self.posFormat).encode()
 
         self.receivers: list[OSCClient] = []
-        for ip, port in self.addresses:
+        for ip, port in self.hosts:
             self.receivers.append(OSCClient(ip, port, encoding="utf8"))
 
         self.isDataClient = False
@@ -110,8 +110,8 @@ class Renderer(object):
         info = [
             self.myType(),
             "\n",
-            "addresses:",
-            self.addresses,
+            "hosts:",
+            self.hosts,
             "\n",
             "listening to format",
             self.posFormat,
@@ -255,6 +255,7 @@ class Wonder(SpatialRenderer):
         self.attributeOsc = {
             skc.SourceAttributes.doppler: b"/WONDER/source/dopplerEffect",
             skc.SourceAttributes.planewave: b"/WONDER/source/type",
+            skc.SourceAttributes.angle: b"/WONDER/source/angle",
         }
         self.oscPre = b"/WONDER/source/position"
         self.oscAnglePref = b"/WONDER/source/angle"
@@ -330,8 +331,8 @@ class Audiorouter(Renderer):
         info = [
             self.myType(),
             "\n",
-            "address:",
-            self.addresses,
+            "hosts:",
+            self.hosts,
             "\n",
             "listening to format",
             "send to render gains",
