@@ -1,18 +1,12 @@
-# import renderer_config as reconf
 from numpy import iterable
 from osc_kreuz.soundobjectclass import SoundObject
 import osc_kreuz.str_keys_conventions as skc
-import osc_kreuz.conversionsTools as ct
 from oscpy.client import OSCClient
 
-# import oscpy.client as oscsock
-import time
 from threading import Timer
 from functools import partial
-from sched import scheduler
 from typing import Any, Callable
 
-# from enum import Enum
 from collections.abc import Iterable
 import logging
 
@@ -106,19 +100,12 @@ class Renderer(object):
 
         self.printRenderInformation()
 
-    def printRenderInformation(self):
-        info = [
-            self.myType(),
-            "\n",
-            "hosts:",
-            self.hosts,
-            "\n",
-            "listening to format",
-            self.posFormat,
-            "\n",
-        ]
-
-        log.info("".join([str(i) for i in info]))
+    def printRenderInformation(self, print_pos_format=True):
+        log.info(f"Initialized renderer {self.myType()}")
+        hosts_str = ", ".join([f"{hostname}:{port}" for hostname, port in self.hosts])
+        log.info(f"\thosts: {hosts_str}")
+        if print_pos_format:
+            log.info(f"\tlistening to format {self.posFormat}")
 
     def myType(self) -> str:
         return "basic Rendererclass: abstract class, doesnt listen"
@@ -327,19 +314,8 @@ class Audiorouter(Renderer):
         self.oscpre_reverbGain = b"/source/reverb/gain"
         self.oscpre_directSend = b"/source/send/direct"
 
-    def printRenderInformation(self):
-        info = [
-            self.myType(),
-            "\n",
-            "hosts:",
-            self.hosts,
-            "\n",
-            "listening to format",
-            "send to render gains",
-            "\n",
-        ]
-
-        log.info("".join([str(i) for i in info]))
+    def printRenderInformation(self, print_pos_format=False):
+        super().printRenderInformation(print_pos_format=False)
 
     def myType(self) -> str:
         return "Audiorouter"
@@ -646,7 +622,6 @@ class ViewClient(SpatialRenderer):
             deleteClient(self, self.alias)
 
     def receivedIsAlive(self):
-        # print('received is alive')
         self.pingCounter = 0
 
     def sourcePositionChanged(self, source_idx):
@@ -667,19 +642,12 @@ class ViewClient(SpatialRenderer):
         self.sourceChanged(source_idx)
 
     def sourceRenderGainChanged(self, source_idx, render_idx):
-        # print('view client notified for renderchange', source_idx, render_idx)
         self.updateStack[source_idx].add(
             (
                 partial(self.sources[source_idx].getRenderGain, render_idx),
                 (self.idxSourceOscPreRender[source_idx][render_idx],),
             )
         )
-        # print(self.updateStack)
-        #
-        # if render_idx == 2:
-        #     self.updateStack[source_idx].add((partial(self.sources[source_idx].getRenderGain, render_idx), (self.oscpre_reverbGain, render_idx)))
-        # else:
-        #     self.updateStack[source_idx].add((partial(self.sources[source_idx].getRenderGain, render_idx), (self.oscpre_renderGain, render_idx)))
         self.sourceChanged(source_idx)
 
     def composeSourceUpdateMessage(

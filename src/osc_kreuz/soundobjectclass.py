@@ -210,7 +210,7 @@ class SoundObject(object):
         self._lastUpdateKey = coordinate_key
 
         # TODO:copy old position
-        # print(len(values), values)
+
         # here the Position is set
         for idx, key in enumerate(skc.posformat[coordinate_key][1]):
             newValue = ct.f32(values[idx])

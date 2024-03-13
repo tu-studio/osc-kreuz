@@ -7,18 +7,11 @@ import ipaddress
 import logging
 
 log = logging.getLogger("OSCcomcenter")
-# log = logging.getLogger("main")
 
 
 soundobjects: list[SoundObject] = []
 
 clientSubscriptions = {}
-# audiorouter: Renderer
-# audiorouterWFS: Renderer
-# renderengineClients: [Renderer] = []
-# dataClients: [Renderer] = []
-# uiClients: [Renderer] = []
-# allClients: [Renderer] = []
 receivers: list[Renderer] = []
 globalconfig = dict()
 extendedOscInput = True
@@ -31,14 +24,11 @@ def setVerbosity(v: int):
     verbosity = v
     bPrintOSC = v >= 2
     Renderer.setVerbosity(v)
-    print("verbosity set to", v)
+    log.debug("verbosity set to", v)
 
 
 osc_ui_server = OSCThreadServer()
-# osc_listen_socket: OSCThreadServer # = osc_ui_server.listen(address='0.0.0.0', port=globalconfig[skc.inputport_ui], default=True)
-
 osc_data_server = OSCThreadServer()
-# osc_automation_socket: OSCThreadServer# = osc_data_server.listen(address='0.0.0.0', port=globalconfig[skc.inputport_data], default=True)
 osc_setting_server = OSCThreadServer()
 
 
@@ -83,7 +73,7 @@ def oscreceived_pong(*args):
             _name = ""
             if len(args) > 0:
                 _name = args[0]
-            print("no renderer for pong message {}".format(_name))
+            log.info("no renderer for pong message {}".format(_name))
 
 
 def oscreceived_subscriptionRequest(*args) -> None:
@@ -136,7 +126,7 @@ def oscreceived_subscriptionRequest(*args) -> None:
 
     else:
         if verbosity > 0:
-            print("not enough arguments für view client")
+            log.info("not enough arguments für view client")
 
 
 def oscreceived_dump(*args):
@@ -148,7 +138,7 @@ def deleteClient(viewC, alias):
     # TODO check if this is threadsafe (it probably isn't)
 
     if verbosity > 0:
-        print("deleting client", viewC, alias)
+        log.info("deleting client", viewC, alias)
     receivers.remove(viewC)
     del clientSubscriptions[alias]
 
@@ -158,7 +148,7 @@ def checkPort(port) -> bool:
         return True
     else:
         if verbosity > 0:
-            print("port", port, "not legit")
+            log.info("port", port, "not legit")
         return False
 
 
@@ -170,7 +160,7 @@ def checkIp(ip) -> bool:
     except:
         ipalright = False
         if verbosity > 0:
-            print("ip address", ip, "not legit")
+            log.info("ip address", ip, "not legit")
 
     return ipalright
 
@@ -180,7 +170,7 @@ def checkIpAndPort(ip, port) -> bool:
 
 
 def oscreceived_debugOscCopy(*args):
-    print("received debug osc", args)
+    log.info("received debug osc", args)
     ip = ""
     port = 0
     if len(args) == 2:
@@ -200,7 +190,7 @@ def oscreceived_debugOscCopy(*args):
         osccopy_ip = ipaddress.ip_address(ip)
         osccopy_port = int(port)
     except:
-        print("unccorrect ip or port")
+        log.info("unccorrect ip or port")
         return
 
     if 1023 < osccopy_port < 65535:
@@ -381,7 +371,7 @@ def setupOscBindings():
 
     if verbosity > 2:
         for add in osc_ui_server.addresses:
-            print(add)
+            log.info(add)
 
 
 def bindToDataAndUiPort(addr: str, func):
@@ -406,9 +396,9 @@ def sourceLegit(id: int) -> bool:
     if verbosity > 0:
         if not indexInRange:
             if not type(id) == int:
-                print("source index is no integer")
+                log.warn("source index is no integer")
             else:
-                print("source index out of range")
+                log.warn("source index out of range")
     return indexInRange
 
 
@@ -417,9 +407,9 @@ def renderIndexLegit(id: int) -> bool:
     if verbosity > 0:
         if not indexInRange:
             if not type(id) == int:
-                print("renderengine index is no integer")
+                log.warn("renderengine index is no integer")
             else:
-                print("renderengine index out of range")
+                log.warn("renderengine index out of range")
     return indexInRange
 
 
@@ -428,9 +418,9 @@ def directSendLegit(id: int) -> bool:
     if verbosity > 0:
         if not indexInRange:
             if not type(id) == int:
-                print("direct send index is no integer")
+                log.warn("direct send index is no integer")
             else:
-                print("direct send index out of range")
+                log.warn("direct send index out of range")
     return indexInRange
 
 
@@ -445,7 +435,6 @@ def oscreceived_setPosition(coordKey, *args, fromUi=True):
 def oscreceived_setPositionForSource(coordKey, sIdx: int, *args, fromUi=True):
 
     if soundobjects[sIdx].setPosition(coordKey, *args, fromUi=fromUi):
-        # print('soundobject has set position')
         notifyRenderClientsForUpdate("sourcePositionChanged", sIdx, fromUi=fromUi)
         # notifyRendererForSourcePosition(sIdx, fromUi)
 
@@ -577,4 +566,4 @@ def oscreceived_sourceAttribute_wString(
 
 def printOSC(*args, addr: str = "", port: int = 0):
     if bPrintOSC:
-        print("incoming OSC on Port", port, addr, args)
+        log.info("incoming OSC on Port", port, addr, args)

@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 
 import osc_kreuz.str_keys_conventions as skc
-import osc_kreuz.conversionsTools as ct
 
 from osc_kreuz.soundobjectclass import SoundObject
 from osc_kreuz.rendererclass import Renderer
 import osc_kreuz.rendererclass as rendererclass
 import osc_kreuz.osccomcenter as osccomcenter
 
-from functools import partial
 from pathlib import Path
+from importlib.resources import files
 
-from oscpy.server import OSCThreadServer
 import click
 import signal
-import argparse
 import yaml
 import logging
 import sys
@@ -97,21 +94,14 @@ def main(config_path, oscdebug, verbose):
                 log.info(f"Loading config file {config_path}")
                 break
 
-        if config_path is None:
-            log.warning("Could not find config file, falling back to default config")
-            possible_config_path = (
-                Path(__file__).parent.parent / "example_configs" / "config_default.yml"
-            )
-            if not possible_config_path.exists():
-                config_path = possible_config_path
-                log.error(
-                    f"Default config file does not exist as well, bring your own please"
-                )
-                sys.exit(-1)
-
-    # read config file
-    with open(config_path) as f:
-        config = yaml.load(f, Loader=yaml.Loader)
+    if config_path is None:
+        log.warn(f"Could not find config, loading default config")
+        config_path = files("osc_kreuz").joinpath("config_default.yml")
+        config = yaml.load(config_path.read_bytes(), Loader=yaml.Loader)
+    else:
+        # read config file
+        with open(config_path) as f:
+            config = yaml.load(f, Loader=yaml.Loader)
 
     # setup debug osc client
     if oscdebug:
