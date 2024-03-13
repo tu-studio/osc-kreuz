@@ -29,7 +29,7 @@ where = ["src"]
 
 
 [tool.setuptools.package-data]
-mypkg = ["*.yml"]
+osc_kreuz = ["*.yml"]
 
 # automatically handle version numbers
 [tool.versioneer]
