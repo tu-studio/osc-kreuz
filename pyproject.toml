@@ -1,0 +1,22 @@
+[project]
+name = "osc_kreuz"
+version = "1.0.0"
+description = "A tool for routing incoming OSC messages to different renderers for spatial audio"
+authors = [
+    { name = "Max Weidauer", email = "weidauer@campus.tu-berlin.de" },
+    { name = "Paul Schuladen" },
+]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["numpy", "oscpy", "click", "pyYAML"]
+license = { file = "LICENSE" }
+
+[project.scripts]
+osc_kreuz = "osc_kreuz.osc_kreuz:main"
+
+[build-system]
+requires = ["setuptools >= 61.0.0"]
+build-backend = "setuptools.build_meta"
+
+# [tool.setuptools.packages.find]
+# where = ["src"]

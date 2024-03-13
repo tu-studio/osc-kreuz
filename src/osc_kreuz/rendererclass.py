@@ -1,8 +1,8 @@
 # import renderer_config as reconf
 from numpy import iterable
-from seamless_oscrouter.soundobjectclass import SoundObject
-import seamless_oscrouter.str_keys_conventions as skc
-import seamless_oscrouter.conversionsTools as ct
+from osc_kreuz.soundobjectclass import SoundObject
+import osc_kreuz.str_keys_conventions as skc
+import osc_kreuz.conversionsTools as ct
 from oscpy.client import OSCClient
 
 # import oscpy.client as oscsock

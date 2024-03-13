@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-import seamless_oscrouter.str_keys_conventions as skc
-import seamless_oscrouter.conversionsTools as ct
+import osc_kreuz.str_keys_conventions as skc
+import osc_kreuz.conversionsTools as ct
 
-from seamless_oscrouter.soundobjectclass import SoundObject
-from seamless_oscrouter.rendererclass import Renderer
-import seamless_oscrouter.rendererclass as rendererclass
-import seamless_oscrouter.osccomcenter as osccomcenter
+from osc_kreuz.soundobjectclass import SoundObject
+from osc_kreuz.rendererclass import Renderer
+import osc_kreuz.rendererclass as rendererclass
+import osc_kreuz.osccomcenter as osccomcenter
 
 from functools import partial
 from pathlib import Path
@@ -25,7 +25,7 @@ logging.basicConfig(format=logFormat, datefmt=timeFormat, level=logging.INFO)
 log = logging.getLogger("main")
 
 
-default_config_file_path = "seamless-core/oscrouter/oscRouterConfig.yml"
+default_config_file_path = "/osc_kreuz/osc_kreuz_config.yml"
 
 
 def debug_prints(globalconfig, extendedOscInput, verbose):
@@ -91,7 +91,6 @@ def main(config_path, oscdebug, verbose):
         for possible_config_path in [
             Path.home() / ".config" / default_config_file_path,
             Path("/etc") / default_config_file_path,
-            Path("/usr/local/etc") / default_config_file_path,
         ]:
             if possible_config_path.exists():
                 config_path = possible_config_path
@@ -100,7 +99,15 @@ def main(config_path, oscdebug, verbose):
 
         if config_path is None:
             log.warning("Could not find config file, falling back to default config")
-            config_path = Path(__file__).parent.parent / "oscRouterConfig.yml"
+            possible_config_path = (
+                Path(__file__).parent.parent / "example_configs" / "config_default.yml"
+            )
+            if not possible_config_path.exists():
+                config_path = possible_config_path
+                log.error(
+                    f"Default config file does not exist as well, bring your own please"
+                )
+                sys.exit(-1)
 
     # read config file
     with open(config_path) as f:
