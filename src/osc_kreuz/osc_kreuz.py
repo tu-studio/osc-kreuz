@@ -77,6 +77,7 @@ def debug_prints(globalconfig, extendedOscInput, verbose):
     type=click.STRING,
 )
 @click.option("-v", "--verbose", count=True, help="increase verbosity level.")
+@click.version_option()
 def main(config_path, oscdebug, verbose):
     osccomcenter.setVerbosity(verbose)
     if verbose > 0:
