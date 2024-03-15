@@ -18,23 +18,78 @@ class RendererException(Exception):
     pass
 
 
+class Message:
+    def __init__(self, path: bytes, values: Any) -> None:
+        self.path = path
+        if isinstance(values, str) or not iterable(values):
+            self.values = [values]
+        self.values: Iterable[Any] = values
+
+
 class Update:
-    def __init__(self, callback, args, path):
-        pass
+    def __init__(
+        self,
+        path: bytes,
+        callback: Callable,
+        callback_arg: Any = None,
+        pre_arg: Any = None,
+        post_arg: Any = None,
+        source_index: int | None = None,
+    ):
+        self.callback = callback
+        self.callback_arg = callback_arg
+        self.pre_arg = pre_arg
+        self.post_arg = post_arg
+        self.path = path
+        self.source_index = source_index
 
     def execute(self):
-        pass
+        return self.callback(self.callback_arg)
 
-    def __eq__(self, __value: object) -> bool:
-        # check that callback, path and args are the same, and that the type is right
+    def __eq__(self, other):
+        """Overrides the default implementation"""
+        if isinstance(other, self.__class__):
+            return (
+                self.callback == other.callback
+                and self.callback_arg == other.callback_arg
+                and self.path == other.path
+            )
         return False
+
+    def __hash__(self):
+        """for use with sets"""
+        return hash(tuple(sorted(self.__dict__.items())))
+
+    def to_message(self) -> Message:
+        values = []
+
+        # add source index to list if it exists
+        if self.source_index is not None:
+            values.append(self.source_index)
+
+        # sometimes needed as first argument
+        if self.pre_arg is not None:
+            values.append(self.pre_arg)
+
+        # add value or values returned by the callback to the list
+        ret_value = self.execute()
+        if isinstance(ret_value, str) or not iterable(ret_value):
+            values.append(ret_value)
+        else:
+            values.extend(ret_value)
+
+        # sometimes needed as a last argument
+        if self.post_arg is not None:
+            values.append(self.post_arg)
+
+        return Message(self.path, values)
 
 
 class Renderer(object):
 
     numberOfSources = 64
     sources: list[SoundObject] = []
-    globalConfig = {}
+    globalConfig: dict = {}
     debugCopy: bool = False
     oscDebugClient: OSCClient
 
@@ -85,7 +140,7 @@ class Renderer(object):
 
         # update stack contains sets of tuples of functions and osc_paths
         # sets are used, so each source is updated only once during the update process
-        self.updateStack: list[set[tuple[Callable, bytes]]] = [
+        self.updateStack: list[set[Update]] = [
             set() for _ in range(self.numberOfSources)
         ]
 
@@ -115,16 +170,15 @@ class Renderer(object):
 
         log.debug(self.myType(), "added destination", ip, str(port))
 
-    def composeSourceUpdateMessage(
-        self, values, sIdx: int = 0, *args
-    ) -> list[tuple[bytes, Iterable]]:
-        return [(args[0], values)]
-
     def sourceChanged(self, source_idx):
         if not self.source_getting_update[source_idx]:
             self.updateSource(source_idx)
         else:
             self.source_needs_update[source_idx] = True
+
+    def add_update(self, source_idx: int, update: Update) -> None:
+        self.updateStack[source_idx].add(update)
+        self.sourceChanged(source_idx)
 
     def updateSource(self, source_idx):
         """Builds and sends source update messages
@@ -133,11 +187,10 @@ class Renderer(object):
             source_idx (int): index of source to be updated
         """
         while self.updateStack[source_idx]:
-            getValueFunc, oscPre = self.updateStack[source_idx].pop()
-            values = getValueFunc()
-
-            msgs = self.composeSourceUpdateMessage(values, source_idx, *oscPre)
-            self.sendUpdates(msgs)
+            update: Update = self.updateStack[source_idx].pop()
+            msg = update.to_message()
+            self.sendUpdates([msg])
+            # TODO add compose message function that is specific to each renderer
 
         self.scheduleSourceUpdateCheck(source_idx)
 
@@ -214,18 +267,15 @@ class SpatialRenderer(Renderer):
         return "Generic Spatial Renderer"
 
     def sourcePositionChanged(self, source_idx):
-        self.updateStack[source_idx].add(
-            (
-                partial(self.sources[source_idx].getPosition, self.posFormat),
-                (self.oscPre,),
-            )
+        self.add_update(
+            source_idx,
+            Update(
+                path=self.oscPre,
+                callback=self.sources[source_idx].getPosition,
+                callback_arg=self.posFormat,
+                source_index=source_idx,
+            ),
         )
-        self.sourceChanged(source_idx)
-
-    def composeSourceUpdateMessage(
-        self, values, sIdx: int = 0, *args
-    ) -> list[tuple[bytes, Iterable]]:
-        return [(args[0], *values)]
 
 
 class Wonder(SpatialRenderer):
@@ -255,14 +305,29 @@ class Wonder(SpatialRenderer):
     def myType(self) -> str:
         return "Wonder"
 
-    def sourceAttributeChanged(self, source_idx, attribute):
-        self.updateStack[source_idx].add(
-            (
-                partial(self.sources[source_idx].getAttribute, attribute),
-                (self.attributeOsc[attribute],),
-            )
+    # TODO when changing position of a plane wave, the angle is not automatically adjusted
+    def sourcePositionChanged(self, source_idx):
+        self.add_update(
+            source_idx,
+            Update(
+                path=self.oscPre,
+                callback=self.sources[source_idx].getPosition,
+                callback_arg=self.posFormat,
+                source_index=source_idx,
+                post_arg=self.interpolTime,
+            ),
         )
-        self.sourceChanged(source_idx)
+
+    def sourceAttributeChanged(self, source_idx, attribute):
+        # TODO can't handle planewave (because of inversion)
+        self.add_update(
+            source_idx,
+            Update(
+                path=self.attributeOsc[attribute],
+                callback=self.sources[source_idx].getAttribute,
+                callback_arg=attribute,
+            ),
+        )
 
     def composeSourceUpdateMessage(
         self, values, sIdx: int = 0, *args
@@ -299,8 +364,9 @@ class Wonder(SpatialRenderer):
         return [sIdx, int(not value)]
 
     def addUpdateAngleToStack(self, sIdx: int):
-        self.updateStack[sIdx].add(
-            (partial(self.sources[sIdx].getPosition, skc.azim), (self.oscAnglePref,))
+        self.add_update(
+            sIdx,
+            (partial(self.sources[sIdx].getPosition, skc.azim), (self.oscAnglePref,)),
         )
 
 
@@ -333,31 +399,32 @@ class Audiorouter(Renderer):
 
     # TODO: better solution putting a tuple of three values in there?
     def sourceDirectSendChanged(self, source_idx, send_idx):
-        self.updateStack[source_idx].add(
+        self.add_update(
+            source_idx,
             (
                 partial(self.sources[source_idx].getDirectSend, send_idx),
                 (self.oscpre_directSend, send_idx),
-            )
+            ),
         )
-        self.sourceChanged(source_idx)
 
     def sourceRenderGainChanged(self, source_idx, render_idx):
         if not render_idx == 1:
             if render_idx == 2:
-                self.updateStack[source_idx].add(
+                self.add_update(
+                    source_idx,
                     (
                         partial(self.sources[source_idx].getRenderGain, render_idx),
                         (self.oscpre_reverbGain, render_idx),
-                    )
+                    ),
                 )
             else:
-                self.updateStack[source_idx].add(
+                self.add_update(
+                    source_idx,
                     (
                         partial(self.sources[source_idx].getRenderGain, render_idx),
                         (self.oscpre_renderGain, render_idx),
-                    )
+                    ),
                 )
-            self.sourceChanged(source_idx)
 
 
 class AudiorouterWFS(Audiorouter):
@@ -367,13 +434,13 @@ class AudiorouterWFS(Audiorouter):
 
     def sourceRenderGainChanged(self, source_idx, render_idx):
         if render_idx == 1:
-            self.updateStack[source_idx].add(
+            self.add_update(
+                source_idx,
                 (
                     partial(self.sources[source_idx].getRenderGain, render_idx),
                     (self.oscpre_renderGain, render_idx),
-                )
+                ),
             )
-            self.sourceChanged(source_idx)
 
     def myType(self) -> str:
         return "Audiorouter-WFS"
@@ -427,26 +494,26 @@ class AudioMatrix(Renderer):
         log.info(f"source gain changed: {source_idx}, {render_idx}")
         if render_idx in self.gain_paths:
             for path in self.gain_paths[render_idx]:
-                self.updateStack[source_idx].add(
+                self.add_update(
+                    source_idx,
                     (
                         partial(self.sources[source_idx].getRenderGain, render_idx),
                         (path,),
-                    )
+                    ),
                 )
-                self.sourceChanged(source_idx)
 
     def sourcePositionChanged(self, source_idx):
         log.info(f"source position update {source_idx}")
         for path, coord_fmt in self.pos_paths:
-            self.updateStack[source_idx].add(
+            self.add_update(
+                source_idx,
                 (
                     (
                         partial(self.sources[source_idx].getPosition, coord_fmt),
                         (path,),
                     )
-                )
+                ),
             )
-            self.sourceChanged(source_idx)
 
 
 class Panoramix(SpatialRenderer):
@@ -474,31 +541,6 @@ class Panoramix(SpatialRenderer):
         addr = self.posAddrs[sIdx]
 
         return [(addr, position)]
-
-
-class IemMultiencoder(SpatialRenderer):
-    def __init__(self, **kwargs):
-        if not "dataformat" in kwargs.keys():
-            kwargs["dataformat"] = skc.ae
-        # kwargs[skc.posformat] = skc.aed
-        super(IemMultiencoder, self).__init__(**kwargs)
-
-        self.posAddrs: list = []
-        for i in range(self.numberOfSources):
-            for kk in skc.posformat[self.posFormat][1]:
-                # TODO: Check if the right strings
-                addrstr = "/MultiEncoder/" + str(i) + skc.fullnames[kk]
-                self.posAddrs.append(addrstr)
-
-        self.debugPrefix = "/dIEM"
-
-    def myType(self) -> str:
-        return "IEM Multiencoder, NOT IMPLEMENTED"
-
-    def composeSourceUpdateMessage(
-        self, values, sIdx: int = 0, *args
-    ) -> list[tuple[bytes, Iterable]]:
-        return []
 
 
 class SuperColliderEngine(SpatialRenderer):
@@ -626,29 +668,30 @@ class ViewClient(SpatialRenderer):
 
     def sourcePositionChanged(self, source_idx):
         if self.indexAsValue:
-            self.updateStack[source_idx].add(
+            self.add_update(
+                source_idx,
                 (
                     partial(self.sources[source_idx].getPosition, self.posFormat),
                     (self.idxSourceOscPrePos[source_idx],),
-                )
+                ),
             )
         else:
-            self.updateStack[source_idx].add(
+            self.add_update(
+                source_idx,
                 (
                     partial(self.sources[source_idx].getPosition, self.posFormat),
                     (self.oscPre,),
-                )
+                ),
             )
-        self.sourceChanged(source_idx)
 
     def sourceRenderGainChanged(self, source_idx, render_idx):
-        self.updateStack[source_idx].add(
+        self.add_update(
+            source_idx,
             (
                 partial(self.sources[source_idx].getRenderGain, render_idx),
                 (self.idxSourceOscPreRender[source_idx][render_idx],),
-            )
+            ),
         )
-        self.sourceChanged(source_idx)
 
     def composeSourceUpdateMessage(
         self, values, sIdx: int = 0, *args
@@ -720,40 +763,40 @@ class Oscar(SpatialRenderer):
 
     def sourcePositionChanged(self, source_idx):
         for key in skc.fullformat[self.posFormat]:
-            self.updateStack[source_idx].add(
+            self.add_update(
+                source_idx,
                 (
                     partial(self.sources[source_idx].getPosition, key),
                     (self.oscPosPre[source_idx][key],),
-                )
+                ),
             )
-            self.sourceChanged(source_idx)
 
     def sourceAttributeChanged(self, source_idx, attribute):
-        self.updateStack[source_idx].add(
+        self.add_update(
+            source_idx,
             (
                 partial(self.sources[source_idx].getAttribute[attribute]),
                 (self.oscAttrPre[source_idx][attribute],),
-            )
+            ),
         )
-        self.sourceChanged(source_idx)
 
     def sourceDirectSendChanged(self, source_idx, send_idx):
-        self.updateStack[source_idx].add(
+        self.add_update(
+            source_idx,
             (
                 partial(self.sources[source_idx].getDirectSend, send_idx),
                 (self.oscDirectPre[source_idx][send_idx],),
-            )
+            ),
         )
-        self.sourceChanged(source_idx)
 
     def sourceRenderGainChanged(self, source_idx, render_idx):
-        self.updateStack[source_idx].add(
+        self.add_update(
+            source_idx,
             (
                 partial(self.sources[source_idx].getRenderGain, render_idx),
                 (self.oscRenderPre[source_idx][render_idx],),
-            )
+            ),
         )
-        self.sourceChanged(source_idx)
 
     def composeSourceUpdateMessage(
         self, values, sIdx: int = 0, *args
@@ -801,24 +844,23 @@ class SeamlessPlugin(SpatialRenderer):
         pass
 
     def sourceRenderGainChanged(self, source_idx, render_idx):
-        self.updateStack[source_idx].add(
+        self.add_update(
+            source_idx,
             (
                 partial(self.sources[source_idx].getRenderGain, render_idx),
                 (self.oscAddrs["renderGain"], render_idx),
-            )
+            ),
         )
-        self.sourceChanged(source_idx)
 
     def sourcePositionChanged(self, source_idx):
         for key in skc.fullformat[self.posFormat]:
-            self.updateStack[source_idx].add(
+            self.add_update(
+                source_idx,
                 (
                     partial(self.sources[source_idx].getPosition, key),
                     (self.oscAddrs[key],),
-                )
+                ),
             )
-
-        self.sourceChanged(source_idx)
 
 
 class DataClient(Audiorouter, SpatialRenderer):
@@ -828,7 +870,6 @@ class DataClient(Audiorouter, SpatialRenderer):
 renderer_name_dict = {
     "wonder": Wonder,
     "panoramix": Panoramix,
-    "iemmultiencoder": IemMultiencoder,
     "viewclient": ViewClient,
     "oscar": Oscar,
     "scengine": SuperColliderEngine,
