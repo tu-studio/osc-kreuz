@@ -36,3 +36,5 @@ meson.add_install_script(
         venv_path / 'bin' / 'osc-kreuz',
         get_option('prefix') / get_option('bindir') / 'osc-kreuz')
 )
+
+subdir('systemd')
