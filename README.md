@@ -36,13 +36,13 @@ Releases are published automatically when a tag is pushed to GitHub.
 
 ``` bash
 
-   # Set next version number
-   export RELEASE=x.x.x
+# Set next version number
+export RELEASE=x.x.x
 
-   git tag -a $RELEASE -m "Version $RELEASE"
+git tag -a $RELEASE -m "Version $RELEASE"
 
-   # Push
-   git push --tags
+# Push
+git push --tags
 ```
 # About
 The osc-kreuz was originally developed as part of the SeamLess Suite, then named OSC-Router.
