@@ -85,6 +85,32 @@ class Update:
         return Message(self.path, values)
 
 
+class PositionUpdate(Update):
+    def __init__(
+        self,
+        path: bytes,
+        callback: Callable,
+        callback_arg: Any = None,
+        pre_arg: Any = None,
+        post_arg: Any = None,
+        source_index: int | None = None,
+    ):
+        super().__init__(path, callback, callback_arg, pre_arg, post_arg, source_index)
+
+
+class GainUpdate(Update):
+    def __init__(
+        self,
+        path: bytes,
+        callback: Callable,
+        callback_arg: Any = None,
+        pre_arg: Any = None,
+        post_arg: Any = None,
+        source_index: int | None = None,
+    ):
+        super().__init__(path, callback, callback_arg, pre_arg, post_arg, source_index)
+
+
 class Renderer(object):
 
     numberOfSources = 64
@@ -364,6 +390,9 @@ class Wonder(SpatialRenderer):
         return [sIdx, int(not value)]
 
     def addUpdateAngleToStack(self, sIdx: int):
+        self.add_update(
+            sIdx, Update(self.oscAnglePref, self.sources[sIdx].getPosition, skc.azim)
+        )
         self.add_update(
             sIdx,
             (partial(self.sources[sIdx].getPosition, skc.azim), (self.oscAnglePref,)),
