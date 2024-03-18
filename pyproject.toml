@@ -13,7 +13,7 @@ dependencies = ["numpy", "oscpy", "click", "pyYAML"]
 license = { file = "LICENSE" }
 
 [project.scripts]
-osc_kreuz = "osc_kreuz.osc_kreuz:main"
+osc-kreuz = "osc_kreuz.osc_kreuz:main"
 
 [project.urls]
 Github = "https://github.com/tu-studio/osc_kreuz"
