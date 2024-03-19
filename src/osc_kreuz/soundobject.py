@@ -52,6 +52,9 @@ class SoundObject(object):
         }
         self._changedaAttributes: set = set()
 
+        if "render_units" in self.globalConfig:
+            self.number_renderer = len(self.globalConfig["render_units"])
+
         self._torendererSends = [np.float32(0.0) for _ in range(self.number_renderer)]
         self._changedSends: set = set()
         self._directSends = [0.0] * self.globalConfig["number_direct_sends"]
@@ -197,6 +200,7 @@ class SoundObject(object):
         coordinateType = skc.posformat[coordinate_key][0]
         sthChanged = False
 
+        # XXX why are the ones with skc.posformat[coordinate_key][2]==False ignored? what is even happening here?
         if (
             not self._positionIsSet[coordinateType]
             and not skc.posformat[coordinate_key][2]
@@ -263,7 +267,7 @@ class SoundObject(object):
         else:
             return False
 
-    def getPosition(self, pos_key: str) -> list[float]:
+    def getPosition(self, pos_key: skc.CoordFormats) -> list[float]:
         """Get Position of this sound object in the format specified in pos_key
 
         Args:
@@ -272,13 +276,13 @@ class SoundObject(object):
         Returns:
             list[float]: desired coordinates in a list. ATTENTION: If only one coordinate is requested, it is instead returned as a float.
         """
-        coordinateType = skc.posformat[pos_key][0]
+        coordinateType = skc.posformat[pos_key.value][0]
 
         if not self._positionIsSet[coordinateType]:
             self.updateCoordinateFormat(coordinateType)
 
         coords = []  # np.array([], dtype=np.float32)
-        for key in skc.posformat[pos_key][1]:
+        for key in skc.posformat[pos_key.value][1]:
             coords.append(float(self._position[key]))
         # float_coords = coords.
         if len(coords) == 1:

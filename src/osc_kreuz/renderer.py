@@ -30,28 +30,26 @@ class Update:
     def __init__(
         self,
         path: bytes,
-        callback: Callable,
-        callback_arg: Any = None,
+        soundobject: SoundObject,
+        source_index: int | None = None,
         pre_arg: Any = None,
         post_arg: Any = None,
-        source_index: int | None = None,
     ):
-        self.callback = callback
-        self.callback_arg = callback_arg
+        self.soundobject = soundobject
         self.pre_arg = pre_arg
         self.post_arg = post_arg
         self.path = path
         self.source_index = source_index
 
-    def execute(self):
-        return self.callback(self.callback_arg)
+    def get_value(self):
+        raise NotImplementedError
 
     def __eq__(self, other):
         """Overrides the default implementation"""
         if isinstance(other, self.__class__):
             return (
-                self.callback == other.callback
-                and self.callback_arg == other.callback_arg
+                isinstance(other, self.__class__)
+                and self.source_index == other.source_index
                 and self.path == other.path
             )
         return False
@@ -72,7 +70,7 @@ class Update:
             values.append(self.pre_arg)
 
         # add value or values returned by the callback to the list
-        ret_value = self.execute()
+        ret_value = self.get_value()
         if isinstance(ret_value, str) or not iterable(ret_value):
             values.append(ret_value)
         else:
@@ -89,26 +87,80 @@ class PositionUpdate(Update):
     def __init__(
         self,
         path: bytes,
-        callback: Callable,
-        callback_arg: Any = None,
+        soundobject: SoundObject,
+        coord_fmt: skc.CoordFormats,
+        source_index: int | None = None,
         pre_arg: Any = None,
         post_arg: Any = None,
-        source_index: int | None = None,
     ):
-        super().__init__(path, callback, callback_arg, pre_arg, post_arg, source_index)
+        super().__init__(path, soundobject, source_index, pre_arg, post_arg)
+        self.coord_fmt = coord_fmt
+
+    def get_value(self):
+        return self.soundobject.getPosition(self.coord_fmt)
 
 
 class GainUpdate(Update):
     def __init__(
         self,
         path: bytes,
-        callback: Callable,
-        callback_arg: Any = None,
+        soundobject: SoundObject,
+        render_idx: int,
+        source_index: int | None = None,
         pre_arg: Any = None,
         post_arg: Any = None,
-        source_index: int | None = None,
+        include_render_idx=False,
     ):
-        super().__init__(path, callback, callback_arg, pre_arg, post_arg, source_index)
+        super().__init__(path, soundobject, source_index, pre_arg, post_arg)
+        self.render_idx = render_idx
+        if include_render_idx:
+            self.pre_arg = render_idx
+
+    def get_value(self):
+        return self.soundobject.getRenderGain(self.render_idx)
+
+
+class DirectSendUpdate(Update):
+    def __init__(
+        self,
+        path: bytes,
+        soundobject: SoundObject,
+        send_index: int,
+        source_index: int | None = None,
+        include_send_idx=False,
+        pre_arg: Any = None,
+        post_arg: Any = None,
+    ):
+        super().__init__(path, soundobject, source_index, pre_arg, post_arg)
+        self.send_index = send_index
+        if include_send_idx:
+            self.pre_arg = send_index
+
+    def get_value(self):
+        return self.soundobject.getDirectSend(self.send_index)
+
+
+class AttributeUpdate(Update):
+    def __init__(
+        self,
+        path: bytes,
+        attribute: skc.SourceAttributes,
+        soundobject: SoundObject,
+        source_index: int | None = None,
+        pre_arg: Any = None,
+        post_arg: Any = None,
+    ):
+        super().__init__(path, soundobject, source_index, pre_arg, post_arg)
+        self.attribute = attribute
+
+    def get_value(self):
+        return self.soundobject.getAttribute(self.attribute)
+
+
+class wonderPlanewaveAttributeUpdate(AttributeUpdate):
+    def get_value(self):
+        # for the planewave attribute, the value has to be inverted
+        return int(not super().get_value())
 
 
 class Renderer(object):
@@ -133,7 +185,7 @@ class Renderer(object):
 
     def __init__(
         self,
-        dataformat=skc.xyz,
+        dataformat: skc.CoordFormats | str = skc.CoordFormats.xyz,
         updateintervall=10,
         hostname="127.0.0.1",
         hosts: list[dict] | None = None,
@@ -143,7 +195,7 @@ class Renderer(object):
     ):
         self.setVerbosity(verbosity)
 
-        self.posFormat = dataformat
+        self.posFormat = skc.CoordFormats(dataformat)
         self.validSinglePosKeys = {}
         self.sourceAttributes = sourceattributes
 
@@ -171,7 +223,7 @@ class Renderer(object):
         ]
 
         self.debugPrefix = "/genericRenderer"
-        self.oscPre = ("/source/" + self.posFormat).encode()
+        self.oscPre = ("/source/" + self.posFormat.value).encode()
 
         self.receivers: list[OSCClient] = []
         for ip, port in self.hosts:
@@ -216,7 +268,6 @@ class Renderer(object):
             update: Update = self.updateStack[source_idx].pop()
             msg = update.to_message()
             self.sendUpdates([msg])
-            # TODO add compose message function that is specific to each renderer
 
         self.scheduleSourceUpdateCheck(source_idx)
 
@@ -229,8 +280,7 @@ class Renderer(object):
         for msg in msgs:
             for receiversClient in self.receivers:
                 try:
-                    oscArgs = msg[1]
-                    receiversClient.send_message(msg[0], oscArgs)
+                    receiversClient.send_message(msg.path, msg.values)
 
                 except Exception as e:
                     log.warn(f"Exception while sending: {e}")
@@ -295,10 +345,10 @@ class SpatialRenderer(Renderer):
     def sourcePositionChanged(self, source_idx):
         self.add_update(
             source_idx,
-            Update(
+            PositionUpdate(
                 path=self.oscPre,
-                callback=self.sources[source_idx].getPosition,
-                callback_arg=self.posFormat,
+                soundobject=self.sources[source_idx],
+                coord_fmt=self.posFormat,
                 source_index=source_idx,
             ),
         )
@@ -307,7 +357,7 @@ class SpatialRenderer(Renderer):
 class Wonder(SpatialRenderer):
     def __init__(self, **kwargs):
         if not "dataformat" in kwargs.keys():
-            kwargs["dataformat"] = skc.xy
+            kwargs["dataformat"] = skc.CoordFormats.xy
         if not "sourceattributes" in kwargs.keys():
             kwargs["sourceattributes"] = (
                 skc.SourceAttributes.doppler,
@@ -321,7 +371,6 @@ class Wonder(SpatialRenderer):
             skc.SourceAttributes.angle: b"/WONDER/source/angle",
         }
         self.oscPre = b"/WONDER/source/position"
-        self.oscAnglePref = b"/WONDER/source/angle"
 
         self.interpolTime = self.updateIntervall
         self.linkPositionAndAngle = True
@@ -331,71 +380,75 @@ class Wonder(SpatialRenderer):
     def myType(self) -> str:
         return "Wonder"
 
-    # TODO when changing position of a plane wave, the angle is not automatically adjusted
     def sourcePositionChanged(self, source_idx):
+        # Add position Update to update stack
         self.add_update(
             source_idx,
-            Update(
+            PositionUpdate(
                 path=self.oscPre,
-                callback=self.sources[source_idx].getPosition,
-                callback_arg=self.posFormat,
+                soundobject=self.sources[source_idx],
+                coord_fmt=self.posFormat,
                 source_index=source_idx,
                 post_arg=self.interpolTime,
             ),
         )
+        print(self.updateStack)
 
-    def sourceAttributeChanged(self, source_idx, attribute):
-        # TODO can't handle planewave (because of inversion)
-        self.add_update(
-            source_idx,
-            Update(
-                path=self.attributeOsc[attribute],
-                callback=self.sources[source_idx].getAttribute,
-                callback_arg=attribute,
-            ),
-        )
-
-    def composeSourceUpdateMessage(
-        self, values, sIdx: int = 0, *args
-    ) -> list[tuple[bytes, Iterable]]:
-        osc_pre = args[0]
-        wonderOscMap = {
-            b"/WONDER/source/position": self.wonderPositionValues,
-            b"/WONDER/source/angle": self.wonderAngleValues,
-            b"/WONDER/source/dopplerEffect": self.wonderDopplerValues,
-            b"/WONDER/source/type": self.wonderPlanewave,
-        }
-
-        send_values = wonderOscMap[osc_pre](sIdx, values)
-
-        return [(osc_pre, send_values)]
-
-    def wonderPositionValues(self, sIdx: int, values) -> list:
-        if self.linkPositionAndAngle and self.sources[sIdx].getAttribute(
+        # optionally update angle if the wave is planar
+        if self.linkPositionAndAngle and self.sources[source_idx].getAttribute(
             skc.SourceAttributes.planewave
         ):
-            self.addUpdateAngleToStack(sIdx)
-        return [sIdx, *values, self.interpolTime]
+            self.sourceAttributeChanged(source_idx, skc.SourceAttributes.angle)
 
-    def wonderAngleValues(self, sIdx, values) -> list:
-        # TODO: Umrechnen
-        return [sIdx, values, self.interpolTime]
+    def sourceAttributeChanged(self, source_idx, attribute: skc.SourceAttributes):
+        if attribute == skc.SourceAttributes.planewave:
+            # planewave has special update type
+            self.add_update(
+                source_idx,
+                wonderPlanewaveAttributeUpdate(
+                    path=self.attributeOsc[attribute],
+                    soundobject=self.sources[source_idx],
+                    source_index=source_idx,
+                    attribute=attribute,
+                ),
+            )
 
-    def wonderDopplerValues(self, sIdx, value) -> list:
-        return [sIdx, value]
+            if self.sources[source_idx].getAttribute(attribute):
+                self.update_auto_angle(source_idx)
+        elif attribute == skc.SourceAttributes.angle:
+            # angle needs interpolation time as additional param
+            self.add_update(
+                source_idx,
+                AttributeUpdate(
+                    path=self.attributeOsc[attribute],
+                    soundobject=self.sources[source_idx],
+                    source_index=source_idx,
+                    attribute=attribute,
+                    post_arg=self.interpolTime,
+                ),
+            )
+        else:
+            self.add_update(
+                source_idx,
+                AttributeUpdate(
+                    path=self.attributeOsc[attribute],
+                    soundobject=self.sources[source_idx],
+                    source_index=source_idx,
+                    attribute=attribute,
+                ),
+            )
 
-    def wonderPlanewave(self, sIdx, value) -> list:
-        if value:
-            self.addUpdateAngleToStack(sIdx)
-        return [sIdx, int(not value)]
-
-    def addUpdateAngleToStack(self, sIdx: int):
+    def update_auto_angle(self, source_idx: int):
+        # TODO take into account the user specified angle
         self.add_update(
-            sIdx, Update(self.oscAnglePref, self.sources[sIdx].getPosition, skc.azim)
-        )
-        self.add_update(
-            sIdx,
-            (partial(self.sources[sIdx].getPosition, skc.azim), (self.oscAnglePref,)),
+            source_idx,
+            PositionUpdate(
+                path=self.attributeOsc[skc.SourceAttributes.angle],
+                soundobject=self.sources[source_idx],
+                source_index=source_idx,
+                coord_fmt=skc.CoordFormats.azim,
+                post_arg=self.interpolTime,
+            ),
         )
 
 
@@ -410,50 +463,44 @@ class Audiorouter(Renderer):
         self.oscpre_directSend = b"/source/send/direct"
 
     def printRenderInformation(self, print_pos_format=False):
-        super().printRenderInformation(print_pos_format=False)
+        super().printRenderInformation(print_pos_format=print_pos_format)
 
     def myType(self) -> str:
         return "Audiorouter"
 
-    def composeSourceUpdateMessage(
-        self, values, sIdx: int = 0, *args
-    ) -> list[tuple[bytes, Iterable]]:
-        osc_pre = args[0]
-
-        if osc_pre == self.oscpre_reverbGain:
-            return [(osc_pre, [sIdx, values])]
-        else:
-            cIdx = args[1]
-            return [(osc_pre, [sIdx, cIdx, values])]
-
-    # TODO: better solution putting a tuple of three values in there?
     def sourceDirectSendChanged(self, source_idx, send_idx):
         self.add_update(
             source_idx,
-            (
-                partial(self.sources[source_idx].getDirectSend, send_idx),
-                (self.oscpre_directSend, send_idx),
+            DirectSendUpdate(
+                self.oscpre_directSend,
+                soundobject=self.sources[source_idx],
+                send_index=send_idx,
+                source_index=source_idx,
+                include_send_idx=True,
             ),
         )
 
     def sourceRenderGainChanged(self, source_idx, render_idx):
-        if not render_idx == 1:
-            if render_idx == 2:
-                self.add_update(
-                    source_idx,
-                    (
-                        partial(self.sources[source_idx].getRenderGain, render_idx),
-                        (self.oscpre_reverbGain, render_idx),
-                    ),
-                )
-            else:
-                self.add_update(
-                    source_idx,
-                    (
-                        partial(self.sources[source_idx].getRenderGain, render_idx),
-                        (self.oscpre_renderGain, render_idx),
-                    ),
-                )
+        if render_idx == 1:
+            return
+
+        if render_idx == 2:
+            path = self.oscpre_reverbGain
+            include_render_idx = False
+        else:
+            path = self.oscpre_renderGain
+            include_render_idx = True
+
+        self.add_update(
+            source_idx,
+            GainUpdate(
+                path=path,
+                soundobject=self.sources[source_idx],
+                render_idx=render_idx,
+                source_index=source_idx,
+                include_render_idx=include_render_idx,
+            ),
+        )
 
 
 class AudiorouterWFS(Audiorouter):
@@ -462,14 +509,19 @@ class AudiorouterWFS(Audiorouter):
         self.debugPrefix = "/dAudiorouterWFS"
 
     def sourceRenderGainChanged(self, source_idx, render_idx):
-        if render_idx == 1:
-            self.add_update(
-                source_idx,
-                (
-                    partial(self.sources[source_idx].getRenderGain, render_idx),
-                    (self.oscpre_renderGain, render_idx),
-                ),
-            )
+        if render_idx != 1:
+            return
+
+        self.add_update(
+            source_idx,
+            GainUpdate(
+                path=self.oscpre_renderGain,
+                soundobject=self.sources[source_idx],
+                render_idx=render_idx,
+                source_index=source_idx,
+                include_render_idx=True,
+            ),
+        )
 
     def myType(self) -> str:
         return "Audiorouter-WFS"
@@ -480,7 +532,7 @@ class AudioMatrix(Renderer):
         super().__init__(**kwargs)
         self.debugPrefix = "/dAudioMatrix"
         self.gain_paths: dict[int, list[bytes]] = {}
-        self.pos_paths: list[tuple[bytes, str]] = []
+        self.pos_paths: list[tuple[bytes, skc.CoordFormats]] = []
 
         # this dict is used to translate between render unit index and render unit name
         self.render_unit_indices = {}
@@ -491,6 +543,8 @@ class AudioMatrix(Renderer):
             self.render_unit_indices[render_unit] = index
             self.gain_paths[index] = []
 
+        # add all configured paths from the yaml file to either the correct gain path index,
+        # or to the position_path list
         for path in paths:
             osc_path: str = path["path"]
             path_type = path["type"]
@@ -501,9 +555,9 @@ class AudioMatrix(Renderer):
                 self.gain_paths[renderer_index].append(osc_path.encode())
             elif path_type in ["position", "pos"]:
                 try:
-                    coord_fmt = skc.CoordFormats(path["format"]).value
+                    coord_fmt = skc.CoordFormats(path["format"])
                 except:
-                    coord_fmt = skc.CoordFormats("xyz").value
+                    coord_fmt = skc.CoordFormats("xyz")
                 self.pos_paths.append((osc_path.encode(), coord_fmt))
 
         log.debug("Audio Matrix initialized")
@@ -511,23 +565,17 @@ class AudioMatrix(Renderer):
     def myType(self) -> str:
         return "AudioMatrix"
 
-    def composeSourceUpdateMessage(
-        self, values, sIdx: int = 0, *args
-    ) -> list[tuple[bytes, Iterable]]:
-        osc_pre = args[0]
-        if not iterable(values):
-            values = [values]
-        return [(osc_pre, [sIdx, *values])]
-
     def sourceRenderGainChanged(self, source_idx, render_idx):
         log.info(f"source gain changed: {source_idx}, {render_idx}")
         if render_idx in self.gain_paths:
             for path in self.gain_paths[render_idx]:
                 self.add_update(
                     source_idx,
-                    (
-                        partial(self.sources[source_idx].getRenderGain, render_idx),
-                        (path,),
+                    GainUpdate(
+                        path=path,
+                        soundobject=self.sources[source_idx],
+                        render_idx=render_idx,
+                        source_index=source_idx,
                     ),
                 )
 
@@ -536,40 +584,40 @@ class AudioMatrix(Renderer):
         for path, coord_fmt in self.pos_paths:
             self.add_update(
                 source_idx,
-                (
-                    (
-                        partial(self.sources[source_idx].getPosition, coord_fmt),
-                        (path,),
-                    )
+                PositionUpdate(
+                    path=path,
+                    soundobject=self.sources[source_idx],
+                    coord_fmt=coord_fmt,
+                    source_index=source_idx,
                 ),
             )
 
 
-class Panoramix(SpatialRenderer):
-    def __init__(self, **kwargs):
-        if not "dataformat" in kwargs.keys():
-            kwargs["dataformat"] = skc.xyz
-        super(Panoramix, self).__init__(**kwargs)
+# class Panoramix(SpatialRenderer):
+#     def __init__(self, **kwargs):
+#         if not "dataformat" in kwargs.keys():
+#             kwargs["dataformat"] = skc.xyz
+#         super(Panoramix, self).__init__(**kwargs)
 
-        self.posAddrs = []
-        for i in range(self.numberOfSources):
-            self.posAddrs.append(("/track/" + str(i + 1) + "/xyz").encode())
+#         self.posAddrs = []
+#         for i in range(self.numberOfSources):
+#             self.posAddrs.append(("/track/" + str(i + 1) + "/xyz").encode())
 
-        self.debugPrefix = "/dPanoramix"
+#         self.debugPrefix = "/dPanoramix"
 
-    def myType(self) -> str:
-        return "Panoramix CAREFUL NOT REALLY IMPLEMENTED"
+#     def myType(self) -> str:
+#         return "Panoramix CAREFUL NOT REALLY IMPLEMENTED"
 
-    def composeSourceUpdateMessage(
-        self, values, sIdx: int = 0, *args
-    ) -> list[tuple[bytes, Iterable]]:
-        # msgs = []
-        sobject = self.sources[sIdx]
-        position = sobject.getPosition(self.posFormat)
-        # sourceID = source_idx + 1
-        addr = self.posAddrs[sIdx]
+#     def composeSourceUpdateMessage(
+#         self, values, sIdx: int = 0, *args
+#     ) -> list[tuple[bytes, Iterable]]:
+#         # msgs = []
+#         sobject = self.sources[sIdx]
+#         position = sobject.getPosition(self.posFormat)
+#         # sourceID = source_idx + 1
+#         addr = self.posAddrs[sIdx]
 
-        return [(addr, position)]
+#         return [(addr, position)]
 
 
 class SuperColliderEngine(SpatialRenderer):
@@ -579,28 +627,8 @@ class SuperColliderEngine(SpatialRenderer):
         super(SuperColliderEngine, self).__init__(**kwargs)
 
         self.oscPre = b"/source/pos/aed"
-        self.singleValKeys = {
-            skc.azim: b"/source/pos/azim",
-            skc.dist: b"/source/pos/dist",
-            skc.elev: b"/source/pos/elev",
-        }
-        self.validPosKeys = {skc.azim, skc.dist, skc.elev}
 
         self.debugPrefix = "/dSuperCollider"
-
-    def composeSourceUpdateMessage(
-        self, values, sIdx: int = 0, *args
-    ) -> list[tuple[bytes, Iterable]]:
-        osc_pre = args[0]
-        return [(osc_pre, [sIdx, *values])]
-        # sobject = self.sources[source_idx]
-        # singleUpdate = sobject.getSingleValueUpdate(self.validPosKeys)
-        # if singleUpdate:
-        #     return [(self.singleValKeys[singleUpdate[0]]), [singleUpdate[1]]]
-        #
-        # else:
-        #     position = sobject.getPosition(self.posFormat)
-        #     return [(self.addrstr, [source_idx + 1, *position])]
 
     def myType(self) -> str:
         return "Supercolliderengine"
@@ -638,7 +666,7 @@ class ViewClient(SpatialRenderer):
     def createOscPrefixes(self):
         for i in range(self.numberOfSources):
             self.idxSourceOscPrePos[i] = "/source/{}/{}".format(
-                i + 1, self.posFormat
+                i + 1, self.posFormat.value
             ).encode()
             _aDic = {}
             for attr in skc.knownAttributes:
@@ -697,38 +725,30 @@ class ViewClient(SpatialRenderer):
 
     def sourcePositionChanged(self, source_idx):
         if self.indexAsValue:
-            self.add_update(
-                source_idx,
-                (
-                    partial(self.sources[source_idx].getPosition, self.posFormat),
-                    (self.idxSourceOscPrePos[source_idx],),
-                ),
-            )
+            path = self.idxSourceOscPrePos[source_idx]
+            source_index_for_update = None
         else:
-            self.add_update(
-                source_idx,
-                (
-                    partial(self.sources[source_idx].getPosition, self.posFormat),
-                    (self.oscPre,),
-                ),
-            )
+            path = self.oscPre
+            source_index_for_update = source_idx
+        self.add_update(
+            source_idx,
+            PositionUpdate(
+                path=path,
+                soundobject=self.sources[source_idx],
+                coord_fmt=self.posFormat,
+                source_index=source_index_for_update,
+            ),
+        )
 
     def sourceRenderGainChanged(self, source_idx, render_idx):
         self.add_update(
             source_idx,
-            (
-                partial(self.sources[source_idx].getRenderGain, render_idx),
-                (self.idxSourceOscPreRender[source_idx][render_idx],),
+            GainUpdate(
+                self.idxSourceOscPreRender[source_idx][render_idx],
+                soundobject=self.sources[source_idx],
+                render_idx=render_idx,
             ),
         )
-
-    def composeSourceUpdateMessage(
-        self, values, sIdx: int = 0, *args
-    ) -> list[tuple[bytes, Iterable]]:
-        if isinstance(values, Iterable):
-            return [(args[0], values)]
-        else:
-            return [(args[0], [values])]
 
 
 class Oscar(SpatialRenderer):
@@ -749,14 +769,9 @@ class Oscar(SpatialRenderer):
         self.oscRenderPre = []
         self.oscDirectPre = []
 
-        # self.oscAttributeOscPre = {
-        #     skc.SourceAttributes.doppler: [],
-        #     skc.SourceAttributes.planewave: []
-        # }
-
         for i in range(self.numberOfSources):
             sourceAddrs = {}
-            for kk in skc.fullformat[self.posFormat]:
+            for kk in skc.fullformat[self.posFormat.value]:
                 addrStr = "/source/" + str(i + 1) + "/" + kk
                 sourceAddrs[kk] = addrStr.encode()
             self.oscPosPre.append(sourceAddrs)
@@ -791,47 +806,45 @@ class Oscar(SpatialRenderer):
         return "Oscar"
 
     def sourcePositionChanged(self, source_idx):
-        for key in skc.fullformat[self.posFormat]:
+        for key in skc.fullformat[self.posFormat.value]:
             self.add_update(
                 source_idx,
-                (
-                    partial(self.sources[source_idx].getPosition, key),
-                    (self.oscPosPre[source_idx][key],),
+                PositionUpdate(
+                    self.oscPosPre[source_idx][key],
+                    soundobject=self.sources[source_idx],
+                    coord_fmt=skc.CoordFormats(key),
                 ),
             )
 
     def sourceAttributeChanged(self, source_idx, attribute):
         self.add_update(
             source_idx,
-            (
-                partial(self.sources[source_idx].getAttribute[attribute]),
-                (self.oscAttrPre[source_idx][attribute],),
+            AttributeUpdate(
+                path=self.oscAttrPre[source_idx][attribute],
+                soundobject=self.sources[source_idx],
+                attribute=attribute,
             ),
         )
 
     def sourceDirectSendChanged(self, source_idx, send_idx):
         self.add_update(
             source_idx,
-            (
-                partial(self.sources[source_idx].getDirectSend, send_idx),
-                (self.oscDirectPre[source_idx][send_idx],),
+            DirectSendUpdate(
+                path=self.oscDirectPre[source_idx][send_idx],
+                soundobject=self.sources[source_idx],
+                send_index=send_idx,
             ),
         )
 
     def sourceRenderGainChanged(self, source_idx, render_idx):
         self.add_update(
             source_idx,
-            (
-                partial(self.sources[source_idx].getRenderGain, render_idx),
-                (self.oscRenderPre[source_idx][render_idx],),
+            GainUpdate(
+                path=self.oscRenderPre[source_idx][render_idx],
+                soundobject=self.sources[source_idx],
+                render_idx=render_idx,
             ),
         )
-
-    def composeSourceUpdateMessage(
-        self, values, sIdx: int = 0, *args
-    ) -> list[tuple[bytes, Iterable]]:
-        osc_pre = args[0]
-        return [(osc_pre, [values])]
 
 
 class SeamlessPlugin(SpatialRenderer):
@@ -850,7 +863,7 @@ class SeamlessPlugin(SpatialRenderer):
 
         self.oscAddrs: dict = {}
 
-        for key in skc.fullformat[self.posFormat]:
+        for key in skc.fullformat[self.posFormat.value]:
             self.oscAddrs[key] = "/source/pos/{}".format(key).encode()
 
         for vv in self.sourceAttributes:
@@ -875,19 +888,24 @@ class SeamlessPlugin(SpatialRenderer):
     def sourceRenderGainChanged(self, source_idx, render_idx):
         self.add_update(
             source_idx,
-            (
-                partial(self.sources[source_idx].getRenderGain, render_idx),
-                (self.oscAddrs["renderGain"], render_idx),
+            GainUpdate(
+                self.oscAddrs["renderGain"],
+                soundobject=self.sources[source_idx],
+                render_idx=render_idx,
+                source_index=source_idx + 1,
+                include_render_idx=True,
             ),
         )
 
     def sourcePositionChanged(self, source_idx):
-        for key in skc.fullformat[self.posFormat]:
+        for key in skc.fullformat[self.posFormat.value]:
             self.add_update(
                 source_idx,
-                (
-                    partial(self.sources[source_idx].getPosition, key),
-                    (self.oscAddrs[key],),
+                PositionUpdate(
+                    path=self.oscAddrs[key],
+                    soundobject=self.sources[source_idx],
+                    coord_fmt=skc.CoordFormats(key),
+                    source_index=source_idx + 1,
                 ),
             )
 
@@ -898,7 +916,7 @@ class DataClient(Audiorouter, SpatialRenderer):
 
 renderer_name_dict = {
     "wonder": Wonder,
-    "panoramix": Panoramix,
+    # "panoramix": Panoramix,
     "viewclient": ViewClient,
     "oscar": Oscar,
     "scengine": SuperColliderEngine,

@@ -177,6 +177,17 @@ class SourceAttributes(Enum):
 
 
 class CoordFormats(Enum):
+    x = "x"
+    y = "y"
+    z = "z"
+    azim = "azim"
+    azimuth = "azim"
+    elev = "elev"
+    elevation = "elev"
+    dist = "dist"
+    distance = "dist"
+    angle = "angle"
+
     nx = "nx"
     nxd = "nxd"
     ny = "ny"
@@ -186,6 +197,7 @@ class CoordFormats(Enum):
     nd = "dist"  # distance
 
     aed = "aed"
+    aedrad = "aedrad"
     ad = "ad"
     ae = "ae"
     ed = "ed"
