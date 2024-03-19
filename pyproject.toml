@@ -16,8 +16,8 @@ license = { file = "LICENSE" }
 osc-kreuz = "osc_kreuz.osc_kreuz:main"
 
 [project.urls]
-Github = "https://github.com/tu-studio/osc_kreuz"
-Issues = "https://github.com/tu-studio/osc_kreuz/issues"
+Github = "https://github.com/tu-studio/osc-kreuz"
+Issues = "https://github.com/tu-studio/osc-kreuz/issues"
 
 
 [build-system]

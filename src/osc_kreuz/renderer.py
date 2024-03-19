@@ -1,5 +1,5 @@
 from numpy import iterable
-from osc_kreuz.soundobjectclass import SoundObject
+from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc
 from oscpy.client import OSCClient
 
