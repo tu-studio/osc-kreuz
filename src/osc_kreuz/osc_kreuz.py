@@ -2,9 +2,9 @@
 
 import osc_kreuz.str_keys_conventions as skc
 
-from osc_kreuz.soundobjectclass import SoundObject
-from osc_kreuz.rendererclass import Renderer
-import osc_kreuz.rendererclass as rendererclass
+from osc_kreuz.soundobject import SoundObject
+from osc_kreuz.renderer import Renderer
+import osc_kreuz.renderer as rendererclass
 import osc_kreuz.osccomcenter as osccomcenter
 
 from pathlib import Path
@@ -140,6 +140,8 @@ def main(config_path, oscdebug, verbose):
     soundobjects: list[SoundObject] = []
     for i in range(numberofsources):
         soundobjects.append(SoundObject(objectID=i + 1))
+
+    # soundobjects are added as a class variable to the render class, so every renderer has access to them
     Renderer.sources = soundobjects
 
     receivers: list[Renderer] = []

@@ -1,0 +1,13 @@
+[Unit]
+Description=osc-kreuz
+After=network.target
+[Install]
+# There is no multi-user.target for a user service, therefore we use default.target
+WantedBy=default.target
+
+[Service]
+Type=simple
+ExecStart=@bin_dir@/osc-kreuz --config /usr/local/etc/osc-kreuz/osc-kreuz-config.yml
+LimitRTPRIO=95
+LimitRTTIME=infinity
+LimitMEMLOCK=infinity
