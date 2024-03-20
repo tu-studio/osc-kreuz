@@ -293,15 +293,15 @@ class Renderer(object):
                         + receiversClient.address
                         + ":"
                         + str(receiversClient.port)
-                        + msg[0].decode()
+                        + msg.path.decode()
                     ).encode()
                     try:
-                        self.oscDebugClient.send_message(debugOsc, msg[1])
+                        self.oscDebugClient.send_message(debugOsc, msg.values)
                     except:
                         pass
 
             if self.printOutput:
-                self.printOscOutput(msg[0], msg[1])
+                self.printOscOutput(msg.path, msg.values)
 
     def scheduleSourceUpdateCheck(self, source_idx):
         self.source_needs_update[source_idx] = False
