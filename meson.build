@@ -1,5 +1,5 @@
 project('osc-kreuz',
-  version: run_command('python', '-c' , 'from src.osc_kreuz._version import get_versions;print(get_versions()["version"])', check: true).stdout().strip())
+  version: run_command('python3', '-c' , 'from src.osc_kreuz._version import get_versions;print(get_versions()["version"])', check: true).stdout().strip())
 
 # py = import('python')
 # python = py.find_installation(meson.current_source_dir() / 'venv/bin/python')
