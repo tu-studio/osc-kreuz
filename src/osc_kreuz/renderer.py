@@ -392,7 +392,6 @@ class Wonder(SpatialRenderer):
                 post_arg=self.interpolTime,
             ),
         )
-        print(self.updateStack)
 
         # optionally update angle if the wave is planar
         if self.linkPositionAndAngle and self.sources[source_idx].getAttribute(
