@@ -22,7 +22,21 @@ logging.basicConfig(format=logFormat, datefmt=timeFormat, level=logging.INFO)
 log = logging.getLogger("main")
 
 
-default_config_file_path = Path("osc-kreuz/osc-kreuz_config.yml")
+# lists for constructing default config paths
+default_config_file_path = Path("osc-kreuz")
+default_config_file_name_options = [
+    "osc-kreuz_conf.yml",
+    "osc-kreuz-conf.yml",
+    "osc-kreuz_config.yml",
+    "osc-kreuz-config.yml",
+    "config.yml",
+    "conf.yml",
+]
+default_config_file_locations = [
+    Path.home() / ".config",
+    Path("/etc"),
+    Path("/usr/local/etc"),
+]
 
 
 def debug_prints(globalconfig, extendedOscInput, verbose):
@@ -85,11 +99,12 @@ def main(config_path, oscdebug, verbose):
     # get Config Path:
     if config_path is None:
         # check different paths for a config file, with the highest one taking precedence
-        for possible_config_path in [
-            Path.home() / ".config" / default_config_file_path,
-            Path("/usr/local/etc") / default_config_file_path,
-            Path("/etc") / default_config_file_path,
-        ]:
+        for possible_config_path in (
+            base / default_config_file_path / filename
+            for base in default_config_file_locations
+            for filename in default_config_file_name_options
+        ):
+            print(possible_config_path)
             if possible_config_path.exists():
                 config_path = possible_config_path
                 log.info(f"Loading config file {config_path}")
