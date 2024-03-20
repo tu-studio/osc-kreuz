@@ -7,7 +7,7 @@ WantedBy=default.target
 
 [Service]
 Type=simple
-ExecStart=@bin_dir@/osc-kreuz --config /usr/local/etc/osc-kreuz/osc-kreuz_config.yml
+ExecStart=@bin_dir@/osc-kreuz
 LimitRTPRIO=95
 LimitRTTIME=infinity
 LimitMEMLOCK=infinity
