@@ -34,7 +34,17 @@ meson.add_install_script(
 	'sh', '-c',
 	'sudo ln -s -f @0@ @1@'.format(
         venv_path / 'bin' / 'osc-kreuz',
-        get_option('prefix') / get_option('bindir') / 'osc-kreuz')
+        get_option('prefix') / get_option('bindir') / 'osc-kreuz' + install_postfix)
 )
+
+if get_option('versioned_install')
+	# linking osc-kreuz binary to bindir
+	meson.add_install_script(
+		'sh', '-c',
+		'sudo ln -s -f @0@ @1@'.format(
+			get_option('prefix') / get_option('bindir') / 'osc-kreuz' + install_postfix,
+			get_option('prefix') / get_option('bindir') / 'osc-kreuz')
+)
+endif
 
 subdir('systemd')

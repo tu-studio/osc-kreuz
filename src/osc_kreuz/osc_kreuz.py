@@ -22,7 +22,7 @@ logging.basicConfig(format=logFormat, datefmt=timeFormat, level=logging.INFO)
 log = logging.getLogger("main")
 
 
-default_config_file_path = "/osc_kreuz/osc_kreuz_config.yml"
+default_config_file_path = "/osc-kreuz/osc-kreuz_config.yml"
 
 
 def debug_prints(globalconfig, extendedOscInput, verbose):
