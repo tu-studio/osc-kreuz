@@ -22,7 +22,7 @@ logging.basicConfig(format=logFormat, datefmt=timeFormat, level=logging.INFO)
 log = logging.getLogger("main")
 
 
-default_config_file_path = "/osc-kreuz/osc-kreuz_config.yml"
+default_config_file_path = Path("osc-kreuz/osc-kreuz_config.yml")
 
 
 def debug_prints(globalconfig, extendedOscInput, verbose):
@@ -82,7 +82,6 @@ def main(config_path, oscdebug, verbose):
     osccomcenter.setVerbosity(verbose)
     if verbose > 0:
         log.setLevel(logging.DEBUG)
-
     # get Config Path:
     if config_path is None:
         # check different paths for a config file, with the highest one taking precedence
