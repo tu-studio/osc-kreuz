@@ -88,6 +88,7 @@ def main(config_path, oscdebug, verbose):
         # check different paths for a config file, with the highest one taking precedence
         for possible_config_path in [
             Path.home() / ".config" / default_config_file_path,
+            Path("/usr/local/etc") / default_config_file_path,
             Path("/etc") / default_config_file_path,
         ]:
             if possible_config_path.exists():
