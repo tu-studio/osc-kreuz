@@ -565,7 +565,6 @@ class AudioMatrix(Renderer):
         return "AudioMatrix"
 
     def sourceRenderGainChanged(self, source_idx, render_idx):
-        log.info(f"source gain changed: {source_idx}, {render_idx}")
         if render_idx in self.gain_paths:
             for path in self.gain_paths[render_idx]:
                 self.add_update(
@@ -579,7 +578,6 @@ class AudioMatrix(Renderer):
                 )
 
     def sourcePositionChanged(self, source_idx):
-        log.info(f"source position update {source_idx}")
         for path, coord_fmt in self.pos_paths:
             self.add_update(
                 source_idx,

@@ -426,7 +426,6 @@ def directSendLegit(id: int) -> bool:
 
 def oscreceived_setPosition(coordKey, *args, fromUi=True):
     sIdx = args[0] - 1
-    log.info(f"osc pos received args{args}")
     if sourceLegit(sIdx):
         sIdx = int(sIdx)
         oscreceived_setPositionForSource(coordKey, sIdx, *args[1:], fromUi=fromUi)
