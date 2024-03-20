@@ -104,7 +104,6 @@ def main(config_path, oscdebug, verbose):
             for base in default_config_file_locations
             for filename in default_config_file_name_options
         ):
-            print(possible_config_path)
             if possible_config_path.exists():
                 config_path = possible_config_path
                 log.info(f"Loading config file {config_path}")
