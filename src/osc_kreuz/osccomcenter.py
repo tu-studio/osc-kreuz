@@ -1,8 +1,8 @@
-from osc_kreuz.rendererclass import Renderer, ViewClient
+from osc_kreuz.renderer import Renderer, ViewClient
 import osc_kreuz.str_keys_conventions as skc
 from oscpy.server import OSCThreadServer
 from functools import partial
-from osc_kreuz.soundobjectclass import SoundObject
+from osc_kreuz.soundobject import SoundObject
 import ipaddress
 import logging
 
