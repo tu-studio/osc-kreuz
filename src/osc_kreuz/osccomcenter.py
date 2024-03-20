@@ -170,7 +170,6 @@ def checkIpAndPort(ip, port) -> bool:
 
 
 def oscreceived_debugOscCopy(*args):
-    log.info("received debug osc", args)
     ip = ""
     port = 0
     if len(args) == 2:
@@ -183,15 +182,16 @@ def oscreceived_debugOscCopy(*args):
             port = ipport[1]
     else:
         Renderer.debugCopy = False
+        log.info("debug client: invalid message format")
         return
-
     try:
         ip = "127.0.0.1" if ip == "localhost" else ip
         osccopy_ip = ipaddress.ip_address(ip)
         osccopy_port = int(port)
     except:
-        log.info("unccorrect ip or port")
+        log.info("debug client: invalid ip or port")
         return
+    log.info(f"debug client connected: {ip}:{port}")
 
     if 1023 < osccopy_port < 65535:
         Renderer.createDebugClient(str(osccopy_ip), osccopy_port)
