@@ -4,7 +4,10 @@ description = "A tool for routing incoming OSC messages to different renderers f
 authors = [
     { name = "Max Weidauer", email = "weidauer@campus.tu-berlin.de" },
     { name = "Fares Schulz", email = "fares.schulz@tu-berlin.de" },
-    { name = "Paul Schuladen" },
+    { name = "Paul Schuladen", email = "example@example.org" },
+]
+maintainers = [
+    { name = "Max Weidauer", email = "weidauer@campus.tu-berlin.de" },
 ]
 readme = "README.md"
 requires-python = ">=3.10"
