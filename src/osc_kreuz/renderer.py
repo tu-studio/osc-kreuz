@@ -22,7 +22,7 @@ class Message:
     def __init__(self, path: bytes, values: Any) -> None:
         self.path = path
         if isinstance(values, str) or not iterable(values):
-            self.values = [values]
+            values = [values]
         self.values: Iterable[Any] = values
 
 
@@ -216,8 +216,7 @@ class Renderer(object):
         self.source_needs_update: list[bool] = [False] * self.numberOfSources
         self.source_getting_update: list[bool] = [False] * self.numberOfSources
 
-        # update stack contains sets of tuples of functions and osc_paths
-        # sets are used, so each source is updated only once during the update process
+        # sets are used in update stack, so each source is updated only once during the update process
         self.updateStack: list[set[Update]] = [
             set() for _ in range(self.numberOfSources)
         ]
@@ -238,7 +237,7 @@ class Renderer(object):
         hosts_str = ", ".join([f"{hostname}:{port}" for hostname, port in self.hosts])
         log.info(f"\thosts: {hosts_str}")
         if print_pos_format:
-            log.info(f"\tlistening to format {self.posFormat}")
+            log.info(f"\tlistening to format {self.posFormat.value}")
 
     def myType(self) -> str:
         return "basic Rendererclass: abstract class, doesnt listen"
