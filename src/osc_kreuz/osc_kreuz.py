@@ -93,11 +93,14 @@ def debug_prints(globalconfig, extendedOscInput, verbose):
 @click.option("-v", "--verbose", count=True, help="increase verbosity level.")
 @click.version_option()
 def main(config_path, oscdebug, verbose):
+
     osccomcenter.setVerbosity(verbose)
     if verbose > 0:
         log.setLevel(logging.DEBUG)
+
     # get Config Path:
     if config_path is None:
+        # TODO move to function
         # check different paths for a config file, with the highest one taking precedence
         for possible_config_path in (
             base / default_config_file_path / filename
