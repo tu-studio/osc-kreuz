@@ -1,11 +1,6 @@
 project('osc-kreuz',
   version: run_command('python3', '-c' , 'from src.osc_kreuz._version import get_versions;print(get_versions()["version"])', check: true).stdout().strip())
 
-# py = import('python')
-# python = py.find_installation(meson.current_source_dir() / 'venv/bin/python')
-
-
-
 
 if get_option('versioned_install')
   	install_postfix = '-' + meson.project_version()
@@ -14,11 +9,29 @@ else
 endif
 
 venv_path = get_option('prefix') / get_option('datadir') / ('osc-kreuz' + install_postfix) / 'venv'
+build_venv_path = meson.current_source_dir() / 'venv'
+wheel_name = 'osc_kreuz-' + meson.project_version() + '-py3-none-any.whl'
 
-# creating virtual environment
+# creating virtual environments
 meson.add_install_script(
 	'sh', '-c',
 	'sudo python3 -m venv @0@; '.format(venv_path)
+)
+
+meson.add_install_script(
+	'sh', '-c',
+	'python3 -m venv @0@; '.format(build_venv_path)
+)
+
+# build python wheel
+meson.add_install_script(
+	'sh', '-c',
+	'@0@/bin/pip install build;'.format(build_venv_path)
+)
+
+meson.add_install_script(
+	'sh', '-c',
+	'@0@/bin/python3 -m build --wheel @1@'.format(build_venv_path, meson.current_source_dir())
 )
 
 # installing osc-kreuz with pip
@@ -26,7 +39,7 @@ meson.add_install_script(
 meson.add_install_script(
 	'sh', '-c',
 	'sudo @0@/bin/pip install @1@; '.format(
-		venv_path, meson.current_source_dir())
+		venv_path, meson.current_source_dir() / 'dist' / wheel_name)
 )
 
 # linking osc-kreuz binary to bindir
