@@ -361,7 +361,7 @@ class SoundObject(object):
         _gain = ct.f32(np.clip(gain, a_min=0, a_max=self.globalConfig[skc.max_gain]))
 
         if self.globalConfig[skc.send_changes_only]:
-            if self._torendererSends[directIdx] == _gain:
+            if self._directSends[directIdx] == _gain:
                 return False
 
         self._directSends[directIdx] = _gain
