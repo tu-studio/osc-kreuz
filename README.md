@@ -23,14 +23,14 @@ pip install osc-kreuz
 
 On our machines osc-kreuz is installed systemwide using:
 ``` bash
-meson setup -Dversioned_install=true --wipe builddir
-meson install -C builddir
+meson setup -Dversioned_install=true --wipe build
+meson install -C build
 ```
 
 when using the `versioned_install` flag the installation of multiple different versions of the osc-kreuz is possible, see [here](versioned_install.md)
 
 # Configuration
-TODO
+The configuration is done using a YAML-Config file.
 
 # Releasing
 
