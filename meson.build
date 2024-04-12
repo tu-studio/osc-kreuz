@@ -20,7 +20,7 @@ run_command('python3',  '-m',  'venv', build_venv_path, check: true)
 run_command('@0@/bin/pip'.format(build_venv_path),  'install', 'build', check: true)
 
 # build wheel
-custom_target('wheel_target', command: ['@0@/bin/python3'.format(build_venv_path), '-m', 'build', '--wheel', '@CURRENT_SOURCE_DIR@', '--outdir',  '@BUILD_ROOT@'], output: wheel_name, build_by_default: true, build_always_stale: true)
+run_command('@0@/bin/python3'.format(build_venv_path), '-m', 'build', '--wheel', meson.current_source_dir(), '--outdir',  meson.build_root(), check: true)
 
 # --- install osc-kreuz with pip
 
