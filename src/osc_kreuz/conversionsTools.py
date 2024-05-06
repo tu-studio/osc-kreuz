@@ -84,6 +84,7 @@ def conv_cart2pol(x, y, z) -> list[np.float32]:
     if azim > 180.0:
         azim -= f32(360)
 
+    # arctan2 is used for the elevation instead of arccot, because we have a elevation=0 at view direction
     elev_rad = np.arctan2(z, np.sqrt(np.square(x) + np.square(y)))
     elev = np.rad2deg(elev_rad)
     if elev > 90.0:
