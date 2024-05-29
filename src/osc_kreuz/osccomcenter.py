@@ -47,6 +47,9 @@ def setupOscSettingsBindings():
     osc_setting_server.bind(
         "/oscrouter/subscribe".encode(), oscreceived_subscriptionRequest
     )
+    osc_setting_server.bind(
+        "/oscrouter/unsubscribe".encode(), osc_handler_unsubscribe
+    )
     osc_setting_server.bind("/oscrouter/ping".encode(), oscreceived_ping)
     osc_setting_server.bind("/oscrouter/pong".encode(), oscreceived_pong)
     osc_setting_server.bind("/oscrouter/dump".encode(), oscreceived_dump)
@@ -98,7 +101,7 @@ def oscreceived_subscriptionRequest(*args) -> None:
 
             _ip = osc_setting_server.get_sender()[1]
 
-            viewClientInitValues["ip_address"] = _ip
+            viewClientInitValues["hostname"] = _ip
 
             # if subArgs>2:
             #     initKeys = ['dataformat', 'indexAsValue', 'updateintervall']
@@ -116,7 +119,6 @@ def oscreceived_subscriptionRequest(*args) -> None:
                 viewClientInitValues["updateintervall"] = args[4]
             except:
                 pass
-
         newViewClient = ViewClient(vCName, **viewClientInitValues)
 
         clientSubscriptions[vCName] = newViewClient
@@ -127,6 +129,27 @@ def oscreceived_subscriptionRequest(*args) -> None:
     else:
         if verbosity > 0:
             log.info("not enough arguments für view client")
+
+def osc_handler_unsubscribe(*args) -> None:
+    """OSC Callback for unsubscribe Requests.
+
+    These requests follow the format:
+    /oscrouter/unsubscribe myname 
+    /oscrouter/unsubscribe [client_name]
+    args[0] nameFor Client
+    """
+
+    subArgs = len(args)
+    if len(args) >= 1:
+        client_name = args[0]
+        try:
+            view_client = clientSubscriptions[client_name]
+            deleteClient(view_client, client_name)
+
+        except KeyError:
+            log.warn(f"can't delete client {client_name}, it does not exist")
+    else:
+        log.warn("not enough arguments für view client")
 
 
 def oscreceived_dump(*args):
@@ -139,8 +162,14 @@ def deleteClient(viewC, alias):
 
     if verbosity > 0:
         log.info("deleting client", viewC, alias)
-    receivers.remove(viewC)
-    del clientSubscriptions[alias]
+    try:
+        receivers.remove(viewC)
+        del clientSubscriptions[alias]
+        log.info(f"removed client {alias}")
+    except (ValueError, KeyError):
+        log.warn(f"tried to delete receiver {alias}, but it does not exist")
+
+
 
 
 def checkPort(port) -> bool:
