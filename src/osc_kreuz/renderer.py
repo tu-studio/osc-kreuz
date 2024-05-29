@@ -236,16 +236,16 @@ class Renderer(object):
 
         self.isDataClient = False
 
-        self.printRenderInformation()
+        self.print_self_information()
 
-    def printRenderInformation(self, print_pos_format=True):
-        log.info(f"Initialized renderer {self.myType()}")
+    def print_self_information(self, print_pos_format=True):
+        log.info(f"Initialized renderer {self.my_type()}")
         hosts_str = ", ".join([f"{hostname}:{port}" for hostname, port in self.hosts])
         log.info(f"\thosts: {hosts_str}")
         if print_pos_format:
             log.info(f"\tlistening to format {self.posFormat.value}")
 
-    def myType(self) -> str:
+    def my_type(self) -> str:
         return "basic Rendererclass: abstract class, doesnt listen"
 
     def add_receiver(self, hostname: str, port: int):
@@ -307,12 +307,7 @@ class Renderer(object):
 
                 if self.debugCopy:
                     debugOsc = (
-                        self.debugPrefix
-                        + "/"
-                        + receiversClient.address
-                        + ":"
-                        + str(receiversClient.port)
-                        + msg.path.decode()
+                        f"{self.debugPrefix}/{receiversClient.address}:{receiversClient.port}{msg.path.decode()}"
                     ).encode()
                     try:
                         self.oscDebugClient.send_message(debugOsc, msg.values)
@@ -327,7 +322,7 @@ class Renderer(object):
         if len(self.updateStack[source_idx]):
             self.update_source(source_idx)
 
-    # implement this functions in subclasses for registering for specific updates
+    # implement these functions in subclasses for registering for specific updates
     def sourceAttributeChanged(self, source_idx, attribute):
         pass
 
@@ -351,7 +346,7 @@ class Renderer(object):
 
 
 class SpatialRenderer(Renderer):
-    def myType(self) -> str:
+    def my_type(self) -> str:
         return "Generic Spatial Renderer"
 
     def sourcePositionChanged(self, source_idx):
@@ -389,7 +384,7 @@ class Wonder(SpatialRenderer):
 
         self.debugPrefix = "/dWonder"
 
-    def myType(self) -> str:
+    def my_type(self) -> str:
         return "Wonder"
 
     def sourcePositionChanged(self, source_idx):
@@ -473,10 +468,10 @@ class Audiorouter(Renderer):
         self.oscpre_reverbGain = b"/source/reverb/gain"
         self.oscpre_directSend = b"/source/send/direct"
 
-    def printRenderInformation(self, print_pos_format=False):
-        super().printRenderInformation(print_pos_format=print_pos_format)
+    def print_self_information(self, print_pos_format=False):
+        super().print_self_information(print_pos_format=print_pos_format)
 
-    def myType(self) -> str:
+    def my_type(self) -> str:
         return "Audiorouter"
 
     def sourceDirectSendChanged(self, source_idx, send_idx):
@@ -534,7 +529,7 @@ class AudiorouterWFS(Audiorouter):
             ),
         )
 
-    def myType(self) -> str:
+    def my_type(self) -> str:
         return "Audiorouter-WFS"
 
 
@@ -573,7 +568,7 @@ class AudioMatrix(Renderer):
 
         log.debug("Audio Matrix initialized")
 
-    def myType(self) -> str:
+    def my_type(self) -> str:
         return "AudioMatrix"
 
     def sourceRenderGainChanged(self, source_idx, render_idx):
@@ -614,7 +609,7 @@ class AudioMatrix(Renderer):
 
 #         self.debugPrefix = "/dPanoramix"
 
-#     def myType(self) -> str:
+#     def my_type(self) -> str:
 #         return "Panoramix CAREFUL NOT REALLY IMPLEMENTED"
 
 #     def composeSourceUpdateMessage(
@@ -639,12 +634,12 @@ class SuperColliderEngine(SpatialRenderer):
 
         self.debugPrefix = "/dSuperCollider"
 
-    def myType(self) -> str:
+    def my_type(self) -> str:
         return "Supercolliderengine"
 
 
 class ViewClient(SpatialRenderer):
-    def myType(self) -> str:
+    def my_type(self) -> str:
         return "viewClient: {}".format(self.alias)
 
     def __init__(self, aliasname, **kwargs):
@@ -811,7 +806,7 @@ class Oscar(SpatialRenderer):
 
         self.debugPrefix = "/dOscar"
 
-    def myType(self) -> str:
+    def my_type(self) -> str:
         return "Oscar"
 
     def sourcePositionChanged(self, source_idx):
@@ -857,7 +852,7 @@ class Oscar(SpatialRenderer):
 
 
 class SeamlessPlugin(SpatialRenderer):
-    def myType(self) -> str:
+    def my_type(self) -> str:
         return "Seamless Plugin"
 
     def __init__(self, **kwargs):
