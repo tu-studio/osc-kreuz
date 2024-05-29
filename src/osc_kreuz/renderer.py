@@ -3,10 +3,10 @@ from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc
 from oscpy.client import OSCClient
 
-from threading import Timer
+from threading import Timer, Event
 from functools import partial
 from typing import Any, Callable
-
+from time import time
 from collections.abc import Iterable
 import logging
 
@@ -213,11 +213,17 @@ class Renderer(object):
 
         self.updateIntervall = int(updateintervall) / 1000
 
-        self.source_needs_update: list[bool] = [False] * self.numberOfSources
-        self.source_getting_update: list[bool] = [False] * self.numberOfSources
+        # update status for all sources
+        self.source_getting_update: list[Event] = [
+            Event() for _ in range(self.numberOfSources)
+        ]
 
         # sets are used in update stack, so each source is updated only once during the update process
         self.updateStack: list[set[Update]] = [
+            set() for _ in range(self.numberOfSources)
+        ]
+        # second update Stack that is swapped in during updates
+        self.updateStackSwap: list[set[Update]] = [
             set() for _ in range(self.numberOfSources)
         ]
 
@@ -242,35 +248,49 @@ class Renderer(object):
     def myType(self) -> str:
         return "basic Rendererclass: abstract class, doesnt listen"
 
-    def addDestination(self, ip: str, port: int):
-        self.receivers.append(OSCClient(ip, port, encoding="utf8"))
-
-        log.debug(self.myType(), "added destination", ip, str(port))
-
-    def sourceChanged(self, source_idx):
-        if not self.source_getting_update[source_idx]:
-            self.updateSource(source_idx)
-        else:
-            self.source_needs_update[source_idx] = True
+    def add_receiver(self, hostname: str, port: int):
+        self.hosts.append((hostname, port))
+        self.receivers.append(OSCClient(hostname, port, encoding="utf8"))
 
     def add_update(self, source_idx: int, update: Update) -> None:
         self.updateStack[source_idx].add(update)
-        self.sourceChanged(source_idx)
+        self.update_source(source_idx)
 
-    def updateSource(self, source_idx):
+    def update_source(self, source_idx) -> None:
         """Builds and sends source update messages
 
         Args:
             source_idx (int): index of source to be updated
         """
-        while self.updateStack[source_idx]:
-            update: Update = self.updateStack[source_idx].pop()
+        # if an update is already in progress simply return
+        if self.source_getting_update[source_idx].is_set():
+            return
+        time_start = time()
+        self.source_getting_update[source_idx].set()
+
+        # swap stacks so the stack we are working on isn't written to
+        self.updateStack[source_idx], self.updateStackSwap[source_idx] = (
+            self.updateStackSwap[source_idx],
+            self.updateStack[source_idx],
+        )
+
+        # get messages from updates
+        msgs = []
+        while self.updateStackSwap[source_idx]:
+            update: Update = self.updateStackSwap[source_idx].pop()
             msg = update.to_message()
-            self.sendUpdates([msg])
+            msgs.append(msg)
 
-        self.scheduleSourceUpdateCheck(source_idx)
+        self.send_updates(msgs)
 
-    def sendUpdates(self, msgs):
+        # schedule releasing of update lock
+        Timer(
+            self.updateIntervall - (time() - time_start),
+            self.release_source_update_lock,
+            args=(source_idx,),
+        ).start()
+
+    def send_updates(self, msgs):
         """This function sends all messages to the osc clients
 
         Args:
@@ -302,17 +322,10 @@ class Renderer(object):
             if self.printOutput:
                 self.printOscOutput(msg.path, msg.values)
 
-    def scheduleSourceUpdateCheck(self, source_idx):
-        self.source_needs_update[source_idx] = False
-        self.source_getting_update[source_idx] = True
-        Timer(
-            self.updateIntervall, partial(self.check_sourceNeedsUpdate, source_idx)
-        ).start()
-
-    def check_sourceNeedsUpdate(self, source_idx):
-        self.source_getting_update[source_idx] = False
-        if self.source_needs_update[source_idx]:
-            self.updateSource(source_idx)
+    def release_source_update_lock(self, source_idx):
+        self.source_getting_update[source_idx].clear()
+        if len(self.updateStack[source_idx]):
+            self.update_source(source_idx)
 
     # implement this functions in subclasses for registering for specific updates
     def sourceAttributeChanged(self, source_idx, attribute):
