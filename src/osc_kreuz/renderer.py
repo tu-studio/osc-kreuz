@@ -319,7 +319,7 @@ class Renderer(object):
 
     def release_source_update_lock(self, source_idx):
         self.source_getting_update[source_idx].clear()
-        if len(self.updateStack[source_idx]):
+        if len(self.updateStack[source_idx]) > 0:
             self.update_source(source_idx)
 
     # implement these functions in subclasses for registering for specific updates
