@@ -196,7 +196,6 @@ class Renderer(object):
         self.setVerbosity(verbosity)
 
         self.posFormat = skc.CoordFormats(dataformat)
-        self.validSinglePosKeys = {}
         self.sourceAttributes = sourceattributes
 
         # check if hosts are defined as an array

@@ -7,11 +7,11 @@ import numpy as np
 deg90_rad = np.deg2rad(90)
 
 
-def mag_xyz(x, y, z) -> np.float32:
+def mag_xyz(x, y, z) -> float:
     return np.sqrt(np.square(x) + np.square(y) + np.square(z))
 
 
-def aed2xyz(a, e, d, coordinates_in_degree: bool = True) -> list[np.float32]:
+def aed2xyz(a, e, d, coordinates_in_degree: bool = True) -> list[float]:
     if coordinates_in_degree == True:
         e = np.deg2rad(e)
         a = np.deg2rad(a)
@@ -24,7 +24,7 @@ def aed2xyz(a, e, d, coordinates_in_degree: bool = True) -> list[np.float32]:
     return [x, y, z]
 
 
-def xyz2aed(x, y, z, coordinates_in_degree: bool = True) -> list[np.float32]:
+def xyz2aed(x, y, z, coordinates_in_degree: bool = True) -> list[float]:
     dist = mag_xyz(x, y, z)
     azim = np.arctan2(y, x)
     elev = np.arctan2(z, np.sqrt(np.square(x) + np.square(y)))
@@ -36,19 +36,19 @@ def xyz2aed(x, y, z, coordinates_in_degree: bool = True) -> list[np.float32]:
     return [azim, elev, dist]
 
 
-def conv_pol2cart(azim, elev, dist) -> list[np.float32]:
+def conv_pol2cart(azim, elev, dist) -> list[float]:
     return aed2xyz(azim, elev, dist)
 
 
-def conv_pol2ncart(azim, elev, dist) -> list[np.float32]:
+def conv_pol2ncart(azim, elev, dist) -> list[float]:
     return aed2xyz(azim, elev, 1, coordinates_in_degree=True)
 
 
-def conv_cart2pol(x, y, z) -> list[np.float32]:
+def conv_cart2pol(x, y, z) -> list[float]:
     return xyz2aed(x, y, z, coordinates_in_degree=True)
 
 
-def conv_cart2ncart(x, y, z) -> list[np.float32]:
+def conv_cart2ncart(x, y, z) -> list[float]:
     nd = mag_xyz(x, y, z)
     inv_mag = 1 / nd
     nx = x * inv_mag
@@ -66,14 +66,14 @@ def conv_ncart2pol(nx, ny, nz, nd):
     return [a, e, nd]
 
 
-def conv_ncart2cart(nx, ny, nz, nd) -> list[np.float32]:
+def conv_ncart2cart(nx, ny, nz, nd) -> list[float]:
     x = nx * nd
     y = ny * nd
     z = nz * nd
     return [x, y, z]
 
 
-def wrapAzimuth180(azim) -> np.float32:
+def wrapAzimuth180(azim) -> float:
     if azim > 180.0:
         azim -= 360
         # return azim
@@ -86,7 +86,7 @@ def wrapAzimuth180(azim) -> np.float32:
     return azim
 
 
-def wrapElevation90(elev) -> np.float32:
+def wrapElevation90(elev) -> float:
     if elev > 90.0:
         elev = 90.0 - elev
         return elev
@@ -95,11 +95,11 @@ def wrapElevation90(elev) -> np.float32:
 
 
 # TODO: implement this
-def azi_to_wonderangle(azim) -> np.float32:
+def azi_to_wonderangle(azim) -> float:
     return azim
 
 
-def dist_to_gain(dist) -> np.float32:
+def dist_to_gain(dist) -> float:
     return dist
 
 
