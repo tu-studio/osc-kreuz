@@ -1,3 +1,4 @@
+from typing import Any
 from osc_kreuz.renderer import Renderer, ViewClient
 import osc_kreuz.str_keys_conventions as skc
 from oscpy.server import OSCThreadServer
@@ -11,9 +12,9 @@ log = logging.getLogger("OSCcomcenter")
 
 soundobjects: list[SoundObject] = []
 
-clientSubscriptions = {}
+clientSubscriptions: dict[str, ViewClient] = {}
 receivers: list[Renderer] = []
-globalconfig = dict()
+globalconfig: dict[str, Any] = dict()
 extendedOscInput = True
 verbosity = 0
 bPrintOSC = False
@@ -47,9 +48,7 @@ def setupOscSettingsBindings():
     osc_setting_server.bind(
         "/oscrouter/subscribe".encode(), oscreceived_subscriptionRequest
     )
-    osc_setting_server.bind(
-        "/oscrouter/unsubscribe".encode(), osc_handler_unsubscribe
-    )
+    osc_setting_server.bind("/oscrouter/unsubscribe".encode(), osc_handler_unsubscribe)
     osc_setting_server.bind("/oscrouter/ping".encode(), oscreceived_ping)
     osc_setting_server.bind("/oscrouter/pong".encode(), oscreceived_pong)
     osc_setting_server.bind("/oscrouter/dump".encode(), oscreceived_dump)
@@ -130,11 +129,12 @@ def oscreceived_subscriptionRequest(*args) -> None:
         if verbosity > 0:
             log.info("not enough arguments für view client")
 
+
 def osc_handler_unsubscribe(*args) -> None:
     """OSC Callback for unsubscribe Requests.
 
     These requests follow the format:
-    /oscrouter/unsubscribe myname 
+    /oscrouter/unsubscribe myname
     /oscrouter/unsubscribe [client_name]
     args[0] nameFor Client
     """
@@ -168,8 +168,6 @@ def deleteClient(viewC, alias):
         log.info(f"removed client {alias}")
     except (ValueError, KeyError):
         log.warn(f"tried to delete receiver {alias}, but it does not exist")
-
-
 
 
 def checkPort(port) -> bool:
