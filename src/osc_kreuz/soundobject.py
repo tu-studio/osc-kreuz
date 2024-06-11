@@ -26,31 +26,30 @@ class SoundObject(object):
         cls.dataPortTimeOut = float(config["data_port_timeout"])
         # cls.number_renderer =
 
-    def __init__(self, objectID=0):
+    def __init__(self, objectID=0, coordinate_scaling_factor=1):
 
         self.objectID = objectID
 
-        self._position: dict[str, np.float32] = {
-            skc.x: ct.f32(0.0),
-            skc.y: ct.f32(1.0),
-            skc.z: ct.f32(0.0),
-            skc.azim: ct.f32(0.0),
-            skc.elev: ct.f32(0.0),
-            skc.dist: ct.f32(1.0),
-            skc.angle: ct.f32(0.0),
-            skc.nx: ct.f32(0.0),
-            skc.ny: ct.f32(1.0),
-            skc.nz: ct.f32(0.0),
-            skc.az_rad: ct.f32(0.0),
-            skc.el_rad: ct.f32(0.0),
+        self._position: dict[str, float] = {
+            skc.x: 0.0,
+            skc.y: 1.0,
+            skc.z: 0.0,
+            skc.azim: 0.0,
+            skc.elev: 0.0,
+            skc.dist: 1.0,
+            skc.angle: 0.0,
+            skc.nx: 0.0,
+            skc.ny: 1.0,
+            skc.nz: 0.0,
+            skc.az_rad: 0.0,
+            skc.el_rad: 0.0,
         }
-
+        self.coordinate_scaling_factor = coordinate_scaling_factor
         self._sourceattributes = {
             skc.SourceAttributes.planewave: 0,
             skc.SourceAttributes.doppler: 0,
             skc.SourceAttributes.angle: 0.0,
         }
-        self._changedaAttributes: set = set()
 
         if "render_units" in self.globalConfig:
             self.number_renderer = len(self.globalConfig["render_units"])
@@ -72,15 +71,9 @@ class SoundObject(object):
 
         self.uiBlockingDict = {}
         self.uiBlockingDict["position"] = self.createBlockingDict()
-        #     {
-        #     _tt: time(),
-        #     _uiBlock: False
-        # }
-        # self.t_position = time()
-        # self._uiDidSetPosition = False
+
         self.uiBlockingDict["attribute"] = self.createBlockingDict()
-        # self.t_setAttribute = time()
-        # self._uiDidSetAttribute = False
+
         self.uiBlockingDict["rendergain"] = []
         for i in range(self.number_renderer):
             self.uiBlockingDict["rendergain"].append(self.createBlockingDict())
@@ -110,22 +103,22 @@ class SoundObject(object):
     def updateCoordinateFormat(self, updateFormat):
 
         # if updateFormat =
-        _calcRad = False
-        _calcDeg = False
+        calcRad = False
+        calcDeg = False
         if updateFormat == skc.polar_rad:
             if self._positionIsSet[skc.polar]:
                 _convert = False
             else:
                 _convert = True
             updateFormat = skc.polar
-            _calcRad = True
+            calcRad = True
 
         elif updateFormat == skc.polar and self._positionIsSet[skc.polar_rad]:
-            _calcDeg = True
+            calcDeg = True
             _convert = False
 
         else:
-            _calcRad = False
+            calcRad = False
             _convert = True
 
         if _convert:
@@ -161,18 +154,18 @@ class SoundObject(object):
             for idx, coo in enumerate(skc.fullformat[updateFormat]):
                 self._position[coo] = updatedCoo[idx]
 
-        if _calcRad:
-            # self._position[skc.az_rad] = ct.deg2rad(self._position[skc.azim])
-            # self._position[skc.el_rad] = ct.deg2rad(self._position[skc.elev])
-            [self._position[skc.az_rad], self._position[skc.el_rad]] = (
-                ct.convert_deg_angleToRad_correctMath(
-                    self._position[skc.azim], self._position[skc.elev]
-                )
-            )
+        if calcRad:
+            self._position[skc.az_rad] = np.deg2rad(self._position[skc.azim])
+            self._position[skc.el_rad] = np.deg2rad(self._position[skc.elev])
+            # [self._position[skc.az_rad], self._position[skc.el_rad]] = (
+            #     ct.convert_deg_angleToRad_correctMath(
+            #         self._position[skc.azim], self._position[skc.elev]
+            #     )
+            # )
             self._positionIsSet[skc.polar_rad] = True
-        elif _calcDeg:
-            self._position[skc.azim] = ct.rad2deg(self._position[skc.az_rad])
-            self._position[skc.elev] = ct.rad2deg(self._position[skc.el_rad])
+        elif calcDeg:
+            self._position[skc.azim] = np.rad2deg(self._position[skc.az_rad])
+            self._position[skc.elev] = np.rad2deg(self._position[skc.el_rad])
 
         self._positionIsSet[updateFormat] = True
 
@@ -217,7 +210,7 @@ class SoundObject(object):
 
         # here the Position is set
         for idx, key in enumerate(skc.posformat[coordinate_key][1]):
-            newValue = ct.f32(values[idx])
+            newValue = values[idx]
             if key == skc.dist:
                 newValue = np.maximum(self.globalConfig["min_dist"], newValue)
             if self.globalConfig[skc.send_changes_only]:
@@ -234,32 +227,6 @@ class SoundObject(object):
 
         # TODO: compare new Position with old position for return
         return sthChanged
-
-    # def setPositionFromAutomation(self, coordinate_key: str, values) -> bool:
-    #
-    #     if self._contState == skc.sControl_state.automation_control:
-    #         return self.setPosition(coordinate_key, values)
-    #
-    #     elif self._contState == skc.sControl_state.auto_switch_control:
-    #         if self._uiDidSetRenderGain:
-    #             if (time() - self._lastPositionUpdateTime) < self.globalConfig[skc.data_port_timeout]:
-    #                 self._uiDidSetRenderGain = False
-    #             else:
-    #                 return False
-    #
-    #         return self.setPosition(coordinate_key, values)
-    #     else:
-    #         return False
-    #
-    #
-    # def setPositionFromUserInterface(self, coordinate_key: str, values) -> bool:
-    #     if self._contState == skc.sControl_state.auto_switch_control or self._contState == skc.sControl_state.manually_control:
-    #         self._uiDidSetRenderGain = True
-    #         self._lastPositionUpdateTime = time()
-    #         self.setPosition(coordinate_key, values)
-    #         return True
-    #     else:
-    #         return False
 
     def getSingleValueUpdate(self, keys):
         if self._lastUpdateKey in keys:
@@ -331,7 +298,7 @@ class SoundObject(object):
         #         self.t_position = time()
         #         self._uiDidSetRenderGain[rendIdx] = True
 
-        _gain = ct.f32(np.clip(gain, a_min=0, a_max=self.globalConfig[skc.max_gain]))
+        _gain = np.clip(gain, a_min=0, a_max=self.globalConfig[skc.max_gain])
 
         if self.globalConfig[skc.send_changes_only]:
             if self._torendererSends[rendIdx] == _gain:
@@ -358,7 +325,7 @@ class SoundObject(object):
         #         self.t_position = time()
         #         self._uiDidSetDirectSend[directIdx] = True
 
-        _gain = ct.f32(np.clip(gain, a_min=0, a_max=self.globalConfig[skc.max_gain]))
+        _gain = np.clip(gain, a_min=0, a_max=self.globalConfig[skc.max_gain])
 
         if self.globalConfig[skc.send_changes_only]:
             if self._directSends[directIdx] == _gain:
@@ -409,28 +376,3 @@ class SoundObject(object):
                 blockDict[_uiBlock] = False
 
         return blockDict[_uiBlock]
-
-    # def getChangedDirectSends(self) -> [(int, float)]:
-    #     msgs = []
-    #     while self._changedDirSends:
-    #         sendIdx = self._changedSends.pop()
-    #         msgs.append((sendIdx, self._directSends[sendIdx]))
-    #     return msgs
-    #
-    # def getChangedGains(self) -> ([],[]):
-    #     return (self.getChangedRendererGains(), self.getChangedDirectSends())
-    #
-    # def getChangedRendererGains(self) -> [(int, float)]:
-    #     msgs = []
-    #     while self._changedSends:
-    #         sendIdx = self._changedSends.pop()
-    #         msgs.append((sendIdx, self._torendererSends[sendIdx]))
-    #     return msgs
-    # def getChangedAttributes(self, attribute, value):
-    #     pass
-
-
-# does nothing for now
-class LinkedObject(object):
-    def __init__(self, **kwargs):
-        super(LinkedObject, self).__init__(**kwargs)

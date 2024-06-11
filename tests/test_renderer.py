@@ -82,8 +82,7 @@ def prepare_renderer(conf: dict, disable_network: bool = True):
     r.Renderer.sources = [SoundObject(), SoundObject()]
     r.Renderer.globalConfig = global_conf
     if disable_network:
-        r.Renderer.scheduleSourceUpdateCheck = function_override
-        r.Renderer.updateSource = function_override
+        r.Renderer.update_source = function_override
     client = r.createRendererClient(conf)
     return client
 

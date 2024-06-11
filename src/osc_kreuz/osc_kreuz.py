@@ -39,6 +39,33 @@ default_config_file_locations = [
 ]
 
 
+def read_config(config_path) -> dict:
+    # get Config Path:
+    if config_path is None:
+        # TODO move to function
+        # check different paths for a config file, with the highest one taking precedence
+        for possible_config_path in (
+            base / default_config_file_path / filename
+            for base in default_config_file_locations
+            for filename in default_config_file_name_options
+        ):
+            if possible_config_path.exists():
+                config_path = possible_config_path
+                log.info(f"Loading config file {config_path}")
+                break
+
+    if config_path is None:
+        log.warn(f"Could not find config, loading default config")
+        config_path = files("osc_kreuz").joinpath("config_default.yml")
+        config = yaml.load(config_path.read_bytes(), Loader=yaml.Loader)
+    else:
+        # read config file
+        with open(config_path) as f:
+            config = yaml.load(f, Loader=yaml.Loader)
+
+    return config
+
+
 def debug_prints(globalconfig, extendedOscInput, verbose):
     log.debug("max number of sources is set to %s", str(globalconfig["number_sources"]))
     log.debug("number of rendering units is %s", str(globalconfig["n_renderengines"]))
@@ -98,28 +125,7 @@ def main(config_path, oscdebug, verbose):
     if verbose > 0:
         log.setLevel(logging.DEBUG)
 
-    # get Config Path:
-    if config_path is None:
-        # TODO move to function
-        # check different paths for a config file, with the highest one taking precedence
-        for possible_config_path in (
-            base / default_config_file_path / filename
-            for base in default_config_file_locations
-            for filename in default_config_file_name_options
-        ):
-            if possible_config_path.exists():
-                config_path = possible_config_path
-                log.info(f"Loading config file {config_path}")
-                break
-
-    if config_path is None:
-        log.warn(f"Could not find config, loading default config")
-        config_path = files("osc_kreuz").joinpath("config_default.yml")
-        config = yaml.load(config_path.read_bytes(), Loader=yaml.Loader)
-    else:
-        # read config file
-        with open(config_path) as f:
-            config = yaml.load(f, Loader=yaml.Loader)
+    config = read_config(config_path)
 
     # setup debug osc client
     if oscdebug:
