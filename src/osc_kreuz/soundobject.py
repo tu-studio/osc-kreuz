@@ -18,6 +18,23 @@ class SoundObject(object):
     #
     preferUi = True
     dataPortTimeOut = 1.0
+    conversionMap = {
+        skc.polar: {
+            (False, True, True): (ct.conv_ncart2pol, skc.CoordFormats.nxyzd),
+            (False, True, False): (ct.conv_cart2pol, skc.CoordFormats.xyz),
+            (False, False, True): (ct.conv_ncart2pol, skc.CoordFormats.nxyzd),
+        },
+        skc.cartesian: {
+            (True, False, True): (ct.conv_ncart2cart, skc.CoordFormats.nxyzd),
+            (True, False, False): (ct.conv_pol2cart, skc.CoordFormats.aed),
+            (False, False, True): (ct.conv_ncart2cart, skc.CoordFormats.nxyzd),
+        },
+        skc.normcartesian: {
+            (True, True, False): (ct.conv_cart2ncart, skc.CoordFormats.xyz),
+            (True, False, False): (ct.conv_pol2ncart, skc.CoordFormats.aed),
+            (False, True, False): (ct.conv_cart2ncart, skc.CoordFormats.xyz),
+        },
+    }
 
     @classmethod
     def readGlobalConfig(cls, config: dict):
@@ -26,7 +43,7 @@ class SoundObject(object):
         cls.dataPortTimeOut = float(config["data_port_timeout"])
         # cls.number_renderer =
 
-    def __init__(self, objectID=0, coordinate_scaling_factor=1):
+    def __init__(self, objectID: int = 0, coordinate_scaling_factor: float = 1):
 
         self.objectID = objectID
 
@@ -54,7 +71,7 @@ class SoundObject(object):
         if "render_units" in self.globalConfig:
             self.number_renderer = len(self.globalConfig["render_units"])
 
-        self._torendererSends = [np.float32(0.0) for _ in range(self.number_renderer)]
+        self._torendererSends = [float(0.0) for _ in range(self.number_renderer)]
         self._changedSends: set = set()
         self._directSends = [0.0] * self.globalConfig["number_direct_sends"]
         self._changedDirSends = set()
@@ -90,7 +107,7 @@ class SoundObject(object):
     def createBlockingDict(self) -> dict:
         return {_tt: time(), _uiBlock: False}
 
-    def _getPositionValuesForKey(self, key: skc.CoordFormats) -> list[np.float32]:
+    def _getPositionValuesForKey(self, key: skc.CoordFormats) -> list[float]:
         vals = []
         for kk in skc.posformat[key.value][1]:
             vals.append(self._position[kk])
@@ -128,24 +145,7 @@ class SoundObject(object):
                 self._positionIsSet[skc.normcartesian],
             )
 
-            conversionMap = {
-                skc.polar: {
-                    (False, True, True): (ct.conv_ncart2pol, skc.CoordFormats.nxyzd),
-                    (False, True, False): (ct.conv_cart2pol, skc.CoordFormats.xyz),
-                    (False, False, True): (ct.conv_ncart2pol, skc.CoordFormats.nxyzd),
-                },
-                skc.cartesian: {
-                    (True, False, True): (ct.conv_ncart2cart, skc.CoordFormats.nxyzd),
-                    (True, False, False): (ct.conv_pol2cart, skc.CoordFormats.aed),
-                    (False, False, True): (ct.conv_ncart2cart, skc.CoordFormats.nxyzd),
-                },
-                skc.normcartesian: {
-                    (True, True, False): (ct.conv_cart2ncart, skc.CoordFormats.xyz),
-                    (True, False, False): (ct.conv_pol2ncart, skc.CoordFormats.aed),
-                    (False, True, False): (ct.conv_cart2ncart, skc.CoordFormats.xyz),
-                },
-            }
-            convert_metadata = conversionMap[updateFormat][statusTupel]
+            convert_metadata = self.conversionMap[updateFormat][statusTupel]
             conversion = partial(
                 convert_metadata[0]
             )  # , skc.posformat[convert_metadata[1]])
@@ -170,30 +170,23 @@ class SoundObject(object):
         self._positionIsSet[updateFormat] = True
 
     def setPosition(self, coordinate_key: str, *values, fromUi: bool = True) -> bool:
+        """This function is called to set the position of this sound object.
 
+        Args:
+            coordinate_key (str): _description_
+            fromUi (bool, optional): _description_. Defaults to True.
+
+        Returns:
+            bool: True if the position was changed
+        """
         if not self.shouldProcessInput(self.uiBlockingDict["position"], fromUi):
             return False
 
-        # if fromUi:
-        #     self.gotUiInput(self.uiBlockDict['position'])
-        #
-        # elif self.preferUi and self.dataPortStillBlocked(self.uiBlockDict['position']):
-        #     return False
-
-        # if self.preferUi:
-        #     if not fromUi and self._uiDidSetPosition:
-        #         if self.dataPortStillBlocked(self.t_position):
-        #             return False
-        #         else:
-        #             self._uiDidSetPosition = False
-        #     else:
-        #         self.t_position = time()
-        #         self._uiDidSetPosition = True
-        #
         coordinateType = skc.posformat[coordinate_key][0]
         sthChanged = False
 
-        # XXX why are the ones with skc.posformat[coordinate_key][2]==False ignored? what is even happening here?
+        # handle formats that are not full where coordinates are
+        # currently not present in the right format
         if (
             not self._positionIsSet[coordinateType]
             and not skc.posformat[coordinate_key][2]
@@ -201,8 +194,9 @@ class SoundObject(object):
             self.updateCoordinateFormat(coordinateType)
             sthChanged = True
 
-        for kk in self._positionIsSet.keys():
-            self._positionIsSet[kk] = False
+        # reset positionIsSet for all coordinate types
+        for key in self._positionIsSet.keys():
+            self._positionIsSet[key] = False
 
         self._lastUpdateKey = coordinate_key
 
@@ -211,8 +205,15 @@ class SoundObject(object):
         # here the Position is set
         for idx, key in enumerate(skc.posformat[coordinate_key][1]):
             newValue = values[idx]
+
+            # don't let distance become zero. coordinate_scaling also happens here
+            # TODO find better solution, this just works for aed, not for xyz coordinates
             if key == skc.dist:
+                newValue = newValue * self.coordinate_scaling_factor
                 newValue = np.maximum(self.globalConfig["min_dist"], newValue)
+            elif coordinateType == skc.cartesian or key == skc.nd:
+                newValue *= self.coordinate_scaling_factor
+
             if self.globalConfig[skc.send_changes_only]:
                 if not newValue == self._position[key]:
                     sthChanged = True
@@ -220,8 +221,6 @@ class SoundObject(object):
             else:
                 self._position[key] = newValue
                 sthChanged = True
-
-            # self._position[key] = ct.f32(values[idx])
 
         self._positionIsSet[coordinateType] = True
 
@@ -234,7 +233,7 @@ class SoundObject(object):
         else:
             return False
 
-    def getPosition(self, pos_key: skc.CoordFormats) -> list[float]:
+    def getPosition(self, pos_key: skc.CoordFormats) -> list[float] | float:
         """Get Position of this sound object in the format specified in pos_key
 
         Args:
@@ -248,7 +247,7 @@ class SoundObject(object):
         if not self._positionIsSet[coordinateType]:
             self.updateCoordinateFormat(coordinateType)
 
-        coords = []  # np.array([], dtype=np.float32)
+        coords = []  # np.array([], dtype=float)
         for key in skc.posformat[pos_key.value][1]:
             coords.append(float(self._position[key]))
         # float_coords = coords.
@@ -341,7 +340,7 @@ class SoundObject(object):
     def getBoolAndTime(self, *args):
         pass
 
-    def getAllRendererGains(self) -> list[np.float32]:
+    def getAllRendererGains(self) -> list[float]:
         return self._torendererSends
 
     def getRenderGain(self, rIdx: int) -> float:
