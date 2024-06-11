@@ -60,7 +60,8 @@ plane = "planewave"
 planewave = "planewave"
 angle = "angle"
 
-
+# this dict contains all supported coordinate formats.
+# the tuples follow this format: (coordinatesystemtype, (single coordinates), full positional info?)
 posformat = {
     # cartesian xyz
     x: (cartesian, (x,), False),
