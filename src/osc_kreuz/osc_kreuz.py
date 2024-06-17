@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from types import NoneType
+from typing import Callable
 import osc_kreuz.str_keys_conventions as skc
 
 from osc_kreuz.soundobject import SoundObject
@@ -64,6 +66,24 @@ def read_config(config_path) -> dict:
             config = yaml.load(f, Loader=yaml.Loader)
 
     return config
+
+
+def read_config_option(
+    config, option_name: str, option_type: Callable | NoneType = None, default=None
+):
+    if option_name in config:
+        val = config[option_name]
+
+        if option_type is None:
+            return val
+
+        try:
+            return option_type(val)
+        except Exception:
+            log.error(f"Could not read config option {option_name}")
+        return config[option_name]
+    else:
+        return default
 
 
 def debug_prints(globalconfig, extendedOscInput, verbose):
@@ -155,14 +175,17 @@ def main(config_path, oscdebug, verbose):
     osccomcenter.globalconfig = globalconfig
 
     # setup number of sources
-    numberofsources = int(globalconfig["number_sources"])  # 64
-
+    numberofsources = read_config_option(globalconfig, "number_sources", int, 64)
+    room_scaling_factor = read_config_option(
+        globalconfig, "room_scaling_factor", float, 1.0
+    )
     Renderer.numberOfSources = numberofsources
 
     # Data initialisation
-    soundobjects: list[SoundObject] = []
-    for i in range(numberofsources):
-        soundobjects.append(SoundObject(objectID=i + 1))
+    soundobjects: list[SoundObject] = [
+        SoundObject(objectID=i + 1, coordinate_scaling_factor=room_scaling_factor)
+        for i in range(numberofsources)
+    ]
 
     # soundobjects are added as a class variable to the render class, so every renderer has access to them
     Renderer.sources = soundobjects
