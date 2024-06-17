@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from types import NoneType
+from typing import Callable
 import osc_kreuz.str_keys_conventions as skc
 
 from osc_kreuz.soundobject import SoundObject
@@ -37,6 +39,51 @@ default_config_file_locations = [
     Path("/etc"),
     Path("/usr/local/etc"),
 ]
+
+
+def read_config(config_path) -> dict:
+    # get Config Path:
+    if config_path is None:
+        # TODO move to function
+        # check different paths for a config file, with the highest one taking precedence
+        for possible_config_path in (
+            base / default_config_file_path / filename
+            for base in default_config_file_locations
+            for filename in default_config_file_name_options
+        ):
+            if possible_config_path.exists():
+                config_path = possible_config_path
+                log.info(f"Loading config file {config_path}")
+                break
+
+    if config_path is None:
+        log.warn(f"Could not find config, loading default config")
+        config_path = files("osc_kreuz").joinpath("config_default.yml")
+        config = yaml.load(config_path.read_bytes(), Loader=yaml.Loader)
+    else:
+        # read config file
+        with open(config_path) as f:
+            config = yaml.load(f, Loader=yaml.Loader)
+
+    return config
+
+
+def read_config_option(
+    config, option_name: str, option_type: Callable | NoneType = None, default=None
+):
+    if option_name in config:
+        val = config[option_name]
+
+        if option_type is None:
+            return val
+
+        try:
+            return option_type(val)
+        except Exception:
+            log.error(f"Could not read config option {option_name}")
+        return config[option_name]
+    else:
+        return default
 
 
 def debug_prints(globalconfig, extendedOscInput, verbose):
@@ -98,28 +145,7 @@ def main(config_path, oscdebug, verbose):
     if verbose > 0:
         log.setLevel(logging.DEBUG)
 
-    # get Config Path:
-    if config_path is None:
-        # TODO move to function
-        # check different paths for a config file, with the highest one taking precedence
-        for possible_config_path in (
-            base / default_config_file_path / filename
-            for base in default_config_file_locations
-            for filename in default_config_file_name_options
-        ):
-            if possible_config_path.exists():
-                config_path = possible_config_path
-                log.info(f"Loading config file {config_path}")
-                break
-
-    if config_path is None:
-        log.warn(f"Could not find config, loading default config")
-        config_path = files("osc_kreuz").joinpath("config_default.yml")
-        config = yaml.load(config_path.read_bytes(), Loader=yaml.Loader)
-    else:
-        # read config file
-        with open(config_path) as f:
-            config = yaml.load(f, Loader=yaml.Loader)
+    config = read_config(config_path)
 
     # setup debug osc client
     if oscdebug:
@@ -149,14 +175,17 @@ def main(config_path, oscdebug, verbose):
     osccomcenter.globalconfig = globalconfig
 
     # setup number of sources
-    numberofsources = int(globalconfig["number_sources"])  # 64
-
+    numberofsources = read_config_option(globalconfig, "number_sources", int, 64)
+    room_scaling_factor = read_config_option(
+        globalconfig, "room_scaling_factor", float, 1.0
+    )
     Renderer.numberOfSources = numberofsources
 
     # Data initialisation
-    soundobjects: list[SoundObject] = []
-    for i in range(numberofsources):
-        soundobjects.append(SoundObject(objectID=i + 1))
+    soundobjects: list[SoundObject] = [
+        SoundObject(objectID=i + 1, coordinate_scaling_factor=room_scaling_factor)
+        for i in range(numberofsources)
+    ]
 
     # soundobjects are added as a class variable to the render class, so every renderer has access to them
     Renderer.sources = soundobjects
