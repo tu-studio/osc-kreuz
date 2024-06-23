@@ -656,9 +656,10 @@ class ViewClient(SpatialRenderer):
         if "indexAsValue" in kwargs.keys():
             self.indexAsValue = kwargs["indexAsValue"]
 
+        # TODO initialize variables only once, and with a consistent type pl0x
         self.idxSourceOscPrePos = [b""] * self.numberOfSources
         self.idxSourceOscPreAttri = [{}] * self.numberOfSources
-        self.idxSourceOscPreRender = [[]] * self.numberOfSources
+        self.idxSourceOscPreRender = [[b"" for j in range(self.globalConfig["n_renderengines"])] for i in range(self.numberOfSources)]
 
         self.createOscPrefixes()
 
