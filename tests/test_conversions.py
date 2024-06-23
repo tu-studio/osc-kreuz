@@ -36,3 +36,6 @@ def test_conversions_aed_wraparound():
     ]:
         xyz_calc = ct.conv_pol2cart(*aed)
         assert np.allclose(xyz, xyz_calc)
+
+
+# TODO test normalized coordinate systems, aedrad

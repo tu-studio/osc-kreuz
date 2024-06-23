@@ -665,6 +665,11 @@ class ViewClient(SpatialRenderer):
         # self.idxSourceOscPreAttri
 
         self.pingTimer: Timer | None = None
+        # TODO upon initialization send full current state
+        for i in range(self.globalConfig["number_sources"]):
+            self.sourcePositionChanged(i)
+            for j in range(self.globalConfig["n_renderengines"]):
+                self.sourceRenderGainChanged(i, j)
 
     def createOscPrefixes(self):
         for i in range(self.numberOfSources):
@@ -698,7 +703,7 @@ class ViewClient(SpatialRenderer):
                     i + 1
                 ).encode()
             else:
-                for j in range(self.globalConfig["number_renderunits"]):
+                for j in range(self.globalConfig["n_renderengines"]):
                     self.idxSourceOscPreRender[i][j] = "/source/{}/send/{}".format(
                         i + 1, j
                     ).encode()
@@ -744,12 +749,21 @@ class ViewClient(SpatialRenderer):
         )
 
     def sourceRenderGainChanged(self, source_idx, render_idx):
+        #TODO option to send named paths instead
+        if self.indexAsValue:
+            path = self.idxSourceOscPreRender[source_idx][render_idx]
+            source_index_for_update = None
+        else:
+            path = b"/source/send"
+            source_index_for_update = source_idx
         self.add_update(
             source_idx,
             GainUpdate(
-                self.idxSourceOscPreRender[source_idx][render_idx],
+                path,
                 soundobject=self.sources[source_idx],
                 render_idx=render_idx,
+                source_index=source_index_for_update,
+                include_render_idx=True
             ),
         )
 

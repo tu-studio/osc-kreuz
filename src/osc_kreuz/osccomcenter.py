@@ -159,7 +159,7 @@ def oscreceived_dump(*args):
 
 def deleteClient(viewC, alias):
     # TODO check if this is threadsafe (it probably isn't)
-
+    # TODO handle client with same name connection/reconnecting. maybe add ip as composite key?
     if verbosity > 0:
         log.info("deleting client", viewC, alias)
     try:
