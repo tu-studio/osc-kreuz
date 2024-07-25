@@ -301,8 +301,9 @@ class Renderer(object):
                     receiversClient.send_message(msg.path, msg.values)
 
                 except Exception as e:
-                    log.warn(f"Exception while sending: {e}")
-                    pass
+                    log.warn(
+                        f"Exception while sending to {receiversClient.address}:{receiversClient.port}: {e}"
+                    )
 
                 if self.debugCopy:
                     debugOsc = (
@@ -659,7 +660,10 @@ class ViewClient(SpatialRenderer):
         # TODO initialize variables only once, and with a consistent type pl0x
         self.idxSourceOscPrePos = [b""] * self.numberOfSources
         self.idxSourceOscPreAttri = [{}] * self.numberOfSources
-        self.idxSourceOscPreRender = [[b"" for j in range(self.globalConfig["n_renderengines"])] for i in range(self.numberOfSources)]
+        self.idxSourceOscPreRender = [
+            [b"" for j in range(self.globalConfig["n_renderengines"])]
+            for i in range(self.numberOfSources)
+        ]
 
         self.createOscPrefixes()
 
@@ -750,7 +754,7 @@ class ViewClient(SpatialRenderer):
         )
 
     def sourceRenderGainChanged(self, source_idx, render_idx):
-        #TODO option to send named paths instead
+        # TODO option to send named paths instead
         if self.indexAsValue:
             path = self.idxSourceOscPreRender[source_idx][render_idx]
             source_index_for_update = None
@@ -764,7 +768,7 @@ class ViewClient(SpatialRenderer):
                 soundobject=self.sources[source_idx],
                 render_idx=render_idx,
                 source_index=source_index_for_update,
-                include_render_idx=True
+                include_render_idx=True,
             ),
         )
 

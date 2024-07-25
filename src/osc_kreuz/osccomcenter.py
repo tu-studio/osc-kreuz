@@ -161,7 +161,7 @@ def deleteClient(viewC, alias):
     # TODO check if this is threadsafe (it probably isn't)
     # TODO handle client with same name connection/reconnecting. maybe add ip as composite key?
     if verbosity > 0:
-        log.info("deleting client", viewC, alias)
+        log.info(f"deleting client {viewC}, {alias}")
     try:
         receivers.remove(viewC)
         del clientSubscriptions[alias]
@@ -175,7 +175,7 @@ def checkPort(port) -> bool:
         return True
     else:
         if verbosity > 0:
-            log.info("port", port, "not legit")
+            log.info(f"port {port} not legit")
         return False
 
 
@@ -187,7 +187,7 @@ def checkIp(ip) -> bool:
     except:
         ipalright = False
         if verbosity > 0:
-            log.info("ip address", ip, "not legit")
+            log.info(f"ip address {ip} not legit")
 
     return ipalright
 
@@ -291,6 +291,9 @@ def setupOscBindings():
         address="0.0.0.0", port=globalconfig[skc.inputport_data], default=True
     )
 
+    log.info(
+        f"listening on port {globalconfig[skc.inputport_ui]} for data, {globalconfig[skc.inputport_settings]} for settings"
+    )
     n_sources = globalconfig["number_sources"]
 
     # Setup OSC Callbacks for positional data
@@ -419,7 +422,7 @@ def bindToDataAndUiPort(addr: str, func):
 
 
 def sourceLegit(id: int) -> bool:
-    indexInRange = id in range(globalconfig["number_sources"])
+    indexInRange = 0 <= id < globalconfig["number_sources"]
     if verbosity > 0:
         if not indexInRange:
             if not type(id) == int:
@@ -430,7 +433,7 @@ def sourceLegit(id: int) -> bool:
 
 
 def renderIndexLegit(id: int) -> bool:
-    indexInRange = id in range(globalconfig["n_renderengines"])
+    indexInRange = 0 <= id < globalconfig["n_renderengines"]
     if verbosity > 0:
         if not indexInRange:
             if not type(id) == int:
@@ -441,7 +444,7 @@ def renderIndexLegit(id: int) -> bool:
 
 
 def directSendLegit(id: int) -> bool:
-    indexInRange = id in range(globalconfig["number_direct_sends"])
+    indexInRange = 0 <= id < globalconfig["number_direct_sends"]
     if verbosity > 0:
         if not indexInRange:
             if not type(id) == int:
@@ -452,9 +455,12 @@ def directSendLegit(id: int) -> bool:
 
 
 def oscreceived_setPosition(coordKey, *args, fromUi=True):
-    sIdx = args[0] - 1
+    try:
+        sIdx = int(args[0]) - 1
+    except ValueError:
+        return False
+
     if sourceLegit(sIdx):
-        sIdx = int(sIdx)
         oscreceived_setPositionForSource(coordKey, sIdx, *args[1:], fromUi=fromUi)
 
 
@@ -467,14 +473,21 @@ def oscreceived_setPositionForSource(coordKey, sIdx: int, *args, fromUi=True):
 
 # TODO why are there this many functions for doing almost the same thing?
 def oscreceived_setRenderGain(*args, fromUi: bool = True):
-    sIdx = args[0] - 1
+    try:
+        sIdx = int(args[0]) - 1
+    except ValueError:
+        return False
+
     if sourceLegit(sIdx):
         sIdx = int(sIdx)
         oscreceived_setRenderGainForSource(sIdx, *args[1:], fromUi)
 
 
 def oscreceived_setRenderGainToRenderer(rIdx: int, *args, fromUi: bool = True):
-    sIdx = args[0] - 1
+    try:
+        sIdx = int(args[0]) - 1
+    except ValueError:
+        return False
     if renderIndexLegit(rIdx) and sourceLegit(sIdx):
         rIdx = int(rIdx)
         sIdx = int(sIdx)
@@ -503,7 +516,10 @@ def oscreceived_setRenderGainForSourceForRenderer(
 
 
 def oscreceived_setDirectSend(*args, fromUi: bool = True):
-    sIdx = args[0] - 1
+    try:
+        sIdx = int(args[0]) - 1
+    except ValueError:
+        return False
     if sourceLegit(sIdx):
         sIdx = int(sIdx)
         oscreceived_setDirectSendForSource(sIdx, *args[1:], fromUi)
@@ -531,7 +547,10 @@ def notifyRendererForDirectsendGain(sIdx: int, cIfx: int, fromUi: bool = True):
 
 
 def oscreceived_setAttribute(*args, fromUi: bool = True):
-    sIdx = args[0] - 1
+    try:
+        sIdx = int(args[0]) - 1
+    except ValueError:
+        return False
     if sourceLegit(sIdx):
         sIdx = int(sIdx)
         oscreceived_setAttributeForSource(sIdx, *args[1:], fromUi)
@@ -546,7 +565,10 @@ def oscreceived_setAttributeForSource(sIdx: int, *args, fromUi: bool = True):
 def oscReceived_setValueForAttribute(
     attribute: skc.SourceAttributes, *args, fromUi: bool = True
 ):
-    sIdx = args[0] - 1
+    try:
+        sIdx = int(args[0]) - 1
+    except ValueError:
+        return False
     if sourceLegit(sIdx):
         sIdx = int(sIdx)
         oscreceived_setValueForSourceForAttribute(sIdx, attribute, *args[1:], fromUi)
@@ -576,7 +598,10 @@ def notifyRenderClientsForUpdate(updateFunction: str, *args, fromUi: bool = True
 ######
 def oscreceived_sourceAttribute(attribute: skc.SourceAttributes, *args):
 
-    sidx = int(args[0]) - 1
+    try:
+        sidx = int(args[0]) - 1
+    except ValueError:
+        return False
     if sidx >= 0 and sidx < 64:
         oscreceived_sourceAttribute_wString(sidx, attribute, args[1:])
 
