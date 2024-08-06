@@ -1,5 +1,3 @@
-# Comment on Conversions: In General x and y axis were swapped because 0° should be at the front which can easily achieved throu that
-
 from typing import Any
 import numpy as np
 
@@ -41,7 +39,8 @@ def conv_pol2cart(azim, elev, dist) -> list[float]:
 
 
 def conv_pol2ncart(azim, elev, dist) -> list[float]:
-    return aed2xyz(azim, elev, 1, coordinates_in_degree=True)
+    x, y, z = aed2xyz(azim, elev, 1, coordinates_in_degree=True)
+    return [x, y, z, dist]
 
 
 def conv_cart2pol(x, y, z) -> list[float]:
