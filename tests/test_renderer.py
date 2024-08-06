@@ -141,7 +141,7 @@ def test_wonder_renderer():
         "pos",
         0,
         b"/WONDER/source/position",
-        [0, *so.getPosition(skc.CoordFormats.xy), c.interpolTime],
+        [0, *so.getPosition("xy"), c.interpolTime],
     )
 
     for attr, path, expected in [
@@ -179,8 +179,8 @@ def test_audiomatrix_renderer():
         0,
         [b"/source/pos", b"/source/xyz"],
         [
-            [0, *so.getPosition(skc.CoordFormats.aed)],
-            [0, *so.getPosition(skc.CoordFormats.xyz)],
+            [0, *so.getPosition("aed")],
+            [0, *so.getPosition("xyz")],
         ],
     )
 
