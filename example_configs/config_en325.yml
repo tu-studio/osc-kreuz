@@ -9,39 +9,42 @@ globalconfig:
   number_direct_sends: 46 # including subwoofer
   send_changes_only: 1 # checks every input for changes, if set to 1 might be slower
   data_port_timeout: 2 # time a change in the ui-port blocks incoming automation, set to 0 to deactivate this feature
-  render_units: ["ambi", "wfs", "reverb"]
-# changed to remove sendport, rename listenport to port
+  render_units: ["ambi", "wfs"]
+  room_scaling_factor: 6.046 # all incoming positon changes are scaled by this factor
+
 receivers:
-  - type: audiorouter
-    hosts:
-      - hostname: riviera.ak.tu-berlin.de
-        port: 57120
-    updateintervall: 5
-
-  - type: audiorouterWFS
-    hosts:
-      - hostname: riviera.ak.tu-berlin.de
-        port: 57120
-    updateintervall: 5
-
   - type: audiomatrix
     hosts:
-      - hostname: newmark.ak.tu-berlin.de
+      - hostname: localhost
         port: 8080
     paths:
       - path: /source/send/wfs
         renderer: wfs
         type: gain
-    updateintervall: 5
-
+      - path: /source/send/hoa
+        renderer: ambi
+        type: gain
+      - path: /source/send/sub
+        renderer: ambi
+        type: gain
+      - path: /source/pos/aed
+        type: position
+        format: aedrad
+      - path: /source/pos/dist
+        type: position
+        format: dist
+    updateintervall: 0
+  - type: audiomatrix
+    hosts:
+      - hostname: wintermute.ak.tu-berlin.de
+        port: 8080
+    paths:
+      - path: /source/send/wfs
+        renderer: wfs
+        type: gain
+    updateintervall: 0
   - type: wonder
     hosts:
-      - hostname: riviera.ak.tu-berlin.de
+      - hostname: newmark.ak.tu-berlin.de
         port: 58100
     updateintervall: 50
-
-  - type: scengine
-    hostname: riviera.ak.tu-berlin.de
-    port: 57120
-    updateintervall: 10
-    dataformat: aedrad

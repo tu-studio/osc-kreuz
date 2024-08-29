@@ -88,7 +88,7 @@ class PositionUpdate(Update):
         self,
         path: bytes,
         soundobject: SoundObject,
-        coord_fmt: skc.CoordFormats,
+        coord_fmt: str,
         source_index: int | None = None,
         pre_arg: Any = None,
         post_arg: Any = None,
@@ -185,7 +185,7 @@ class Renderer(object):
 
     def __init__(
         self,
-        dataformat: skc.CoordFormats | str = skc.CoordFormats.xyz,
+        dataformat: str = "xyz",
         updateintervall=10,
         hostname="127.0.0.1",
         hosts: list[dict] | None = None,
@@ -195,7 +195,7 @@ class Renderer(object):
     ):
         self.setVerbosity(verbosity)
 
-        self.posFormat = skc.CoordFormats(dataformat)
+        self.posFormat = dataformat
         self.sourceAttributes = sourceattributes
 
         # check if hosts are defined as an array
@@ -227,7 +227,7 @@ class Renderer(object):
         ]
 
         self.debugPrefix = "/genericRenderer"
-        self.oscPre = ("/source/" + self.posFormat.value).encode()
+        self.oscPre = ("/source/" + self.posFormat).encode()
 
         self.receivers: list[OSCClient] = []
         for ip, port in self.hosts:
@@ -242,7 +242,7 @@ class Renderer(object):
         hosts_str = ", ".join([f"{hostname}:{port}" for hostname, port in self.hosts])
         log.info(f"\thosts: {hosts_str}")
         if print_pos_format:
-            log.info(f"\tlistening to format {self.posFormat.value}")
+            log.info(f"\tlistening to format {self.posFormat}")
 
     def my_type(self) -> str:
         return "basic Rendererclass: abstract class, doesnt listen"
@@ -364,7 +364,7 @@ class SpatialRenderer(Renderer):
 class Wonder(SpatialRenderer):
     def __init__(self, **kwargs):
         if not "dataformat" in kwargs.keys():
-            kwargs["dataformat"] = skc.CoordFormats.xy
+            kwargs["dataformat"] = "xy"
         if not "sourceattributes" in kwargs.keys():
             kwargs["sourceattributes"] = (
                 skc.SourceAttributes.doppler,
@@ -452,7 +452,7 @@ class Wonder(SpatialRenderer):
                 path=self.attributeOsc[skc.SourceAttributes.angle],
                 soundobject=self.sources[source_idx],
                 source_index=source_idx,
-                coord_fmt=skc.CoordFormats.azim,
+                coord_fmt="azim",
                 post_arg=self.interpolTime,
             ),
         )
@@ -538,7 +538,7 @@ class AudioMatrix(Renderer):
         super().__init__(**kwargs)
         self.debugPrefix = "/dAudioMatrix"
         self.gain_paths: dict[int, list[bytes]] = {}
-        self.pos_paths: list[tuple[bytes, skc.CoordFormats]] = []
+        self.pos_paths: list[tuple[bytes, str]] = []
 
         # this dict is used to translate between render unit index and render unit name
         self.render_unit_indices = {}
@@ -561,9 +561,9 @@ class AudioMatrix(Renderer):
                 self.gain_paths[renderer_index].append(osc_path.encode())
             elif path_type in ["position", "pos"]:
                 try:
-                    coord_fmt = skc.CoordFormats(path["format"])
+                    coord_fmt = path["format"]
                 except:
-                    coord_fmt = skc.CoordFormats("xyz")
+                    coord_fmt = "xyz"
                 self.pos_paths.append((osc_path.encode(), coord_fmt))
 
         log.debug("Audio Matrix initialized")
@@ -627,7 +627,7 @@ class AudioMatrix(Renderer):
 class SuperColliderEngine(SpatialRenderer):
     def __init__(self, **kwargs):
         if not "dataformat" in kwargs.keys():
-            kwargs["dataformat"] = skc.aed
+            kwargs["dataformat"] = "aed"
         super(SuperColliderEngine, self).__init__(**kwargs)
 
         self.oscPre = b"/source/pos/aed"
@@ -650,8 +650,6 @@ class ViewClient(SpatialRenderer):
         self.pingCounter = 0
 
         self.debugPrefix = "/d{}".format(aliasname.decode())
-        # self.biAlias = b''
-        # self.setAlias(aliasname)
 
         self.indexAsValue = False
         if "indexAsValue" in kwargs.keys():
@@ -670,7 +668,8 @@ class ViewClient(SpatialRenderer):
         # self.idxSourceOscPreAttri
 
         self.pingTimer: Timer | None = None
-        # TODO upon initialization send full current state
+
+        # send current state to viewclient
         for i in range(self.globalConfig["number_sources"]):
             self.sourcePositionChanged(i)
             for j in range(self.globalConfig["n_renderengines"]):
@@ -679,7 +678,7 @@ class ViewClient(SpatialRenderer):
     def createOscPrefixes(self):
         for i in range(self.numberOfSources):
             self.idxSourceOscPrePos[i] = "/source/{}/{}".format(
-                i + 1, self.posFormat.value
+                i + 1, self.posFormat
             ).encode()
             _aDic = {}
             for attr in skc.knownAttributes:
@@ -773,100 +772,100 @@ class ViewClient(SpatialRenderer):
         )
 
 
-class Oscar(SpatialRenderer):
-    def __init__(self, **kwargs):
-        if not "dataformat" in kwargs.keys():
-            kwargs["dataformat"] = skc.aed
-        super(Oscar, self).__init__(**kwargs)
+# class Oscar(SpatialRenderer):
+#     def __init__(self, **kwargs):
+#         if not "dataformat" in kwargs.keys():
+#             kwargs["dataformat"] = "aed"
+#         super(Oscar, self).__init__(**kwargs)
 
-        self.sourceAttributes = (
-            skc.SourceAttributes.doppler,
-            skc.SourceAttributes.planewave,
-        )
+#         self.sourceAttributes = (
+#             skc.SourceAttributes.doppler,
+#             skc.SourceAttributes.planewave,
+#         )
 
-        # self.posAddrs = []
+#         # self.posAddrs = []
 
-        self.oscPosPre = []
-        self.oscAttrPre = []
-        self.oscRenderPre = []
-        self.oscDirectPre = []
+#         self.oscPosPre = []
+#         self.oscAttrPre = []
+#         self.oscRenderPre = []
+#         self.oscDirectPre = []
 
-        for i in range(self.numberOfSources):
-            sourceAddrs = {}
-            for kk in skc.fullformat[self.posFormat.value]:
-                addrStr = "/source/" + str(i + 1) + "/" + kk
-                sourceAddrs[kk] = addrStr.encode()
-            self.oscPosPre.append(sourceAddrs)
+#         for i in range(self.numberOfSources):
+#             sourceAddrs = {}
+#             for kk in skc.fullformat[self.posFormat]:
+#                 addrStr = "/source/" + str(i + 1) + "/" + kk
+#                 sourceAddrs[kk] = addrStr.encode()
+#             self.oscPosPre.append(sourceAddrs)
 
-            attrDic = {}
-            for key in self.sourceAttributes:
-                oscStr = "/source" + str(i + 1) + "/" + key.value
-                attrDic[key] = oscStr.encode()
-            self.oscAttrPre.append(attrDic)
+#             attrDic = {}
+#             for key in self.sourceAttributes:
+#                 oscStr = "/source" + str(i + 1) + "/" + key.value
+#                 attrDic[key] = oscStr.encode()
+#             self.oscAttrPre.append(attrDic)
 
-            renderGainOscs = []
-            for rId in range(self.globalConfig["n_renderengines"]):
-                riOsc = "/source/" + str(i + 1) + "/render/" + str(rId)
-                renderGainOscs.append(riOsc.encode())
-            self.oscRenderPre.append(renderGainOscs)
+#             renderGainOscs = []
+#             for rId in range(self.globalConfig["n_renderengines"]):
+#                 riOsc = "/source/" + str(i + 1) + "/render/" + str(rId)
+#                 renderGainOscs.append(riOsc.encode())
+#             self.oscRenderPre.append(renderGainOscs)
 
-            channelSend = []
-            for cId in range(self.globalConfig["number_direct_sends"]):
-                csOsc = "/source/" + str(i + 1) + "/direct/" + str(cId)
-                channelSend.append(csOsc.encode())
-            self.oscDirectPre.append(channelSend)
+#             channelSend = []
+#             for cId in range(self.globalConfig["number_direct_sends"]):
+#                 csOsc = "/source/" + str(i + 1) + "/direct/" + str(cId)
+#                 channelSend.append(csOsc.encode())
+#             self.oscDirectPre.append(channelSend)
 
-            # self.posAddrs.append(sourceAddrs)
+#             # self.posAddrs.append(sourceAddrs)
 
-        self.validPosKeys = {skc.dist}
+#         self.validPosKeys = {skc.dist}
 
-        self.isDataClient = True
+#         self.isDataClient = True
 
-        self.debugPrefix = "/dOscar"
+#         self.debugPrefix = "/dOscar"
 
-    def my_type(self) -> str:
-        return "Oscar"
+#     def my_type(self) -> str:
+#         return "Oscar"
 
-    def sourcePositionChanged(self, source_idx):
-        for key in skc.fullformat[self.posFormat.value]:
-            self.add_update(
-                source_idx,
-                PositionUpdate(
-                    self.oscPosPre[source_idx][key],
-                    soundobject=self.sources[source_idx],
-                    coord_fmt=skc.CoordFormats(key),
-                ),
-            )
+#     def sourcePositionChanged(self, source_idx):
+#         for key in skc.fullformat[self.posFormat.value]:
+#             self.add_update(
+#                 source_idx,
+#                 PositionUpdate(
+#                     self.oscPosPre[source_idx][key],
+#                     soundobject=self.sources[source_idx],
+#                     coord_fmt=skc.CoordFormats(key),
+#                 ),
+#             )
 
-    def sourceAttributeChanged(self, source_idx, attribute):
-        self.add_update(
-            source_idx,
-            AttributeUpdate(
-                path=self.oscAttrPre[source_idx][attribute],
-                soundobject=self.sources[source_idx],
-                attribute=attribute,
-            ),
-        )
+#     def sourceAttributeChanged(self, source_idx, attribute):
+#         self.add_update(
+#             source_idx,
+#             AttributeUpdate(
+#                 path=self.oscAttrPre[source_idx][attribute],
+#                 soundobject=self.sources[source_idx],
+#                 attribute=attribute,
+#             ),
+#         )
 
-    def sourceDirectSendChanged(self, source_idx, send_idx):
-        self.add_update(
-            source_idx,
-            DirectSendUpdate(
-                path=self.oscDirectPre[source_idx][send_idx],
-                soundobject=self.sources[source_idx],
-                send_index=send_idx,
-            ),
-        )
+#     def sourceDirectSendChanged(self, source_idx, send_idx):
+#         self.add_update(
+#             source_idx,
+#             DirectSendUpdate(
+#                 path=self.oscDirectPre[source_idx][send_idx],
+#                 soundobject=self.sources[source_idx],
+#                 send_index=send_idx,
+#             ),
+#         )
 
-    def sourceRenderGainChanged(self, source_idx, render_idx):
-        self.add_update(
-            source_idx,
-            GainUpdate(
-                path=self.oscRenderPre[source_idx][render_idx],
-                soundobject=self.sources[source_idx],
-                render_idx=render_idx,
-            ),
-        )
+#     def sourceRenderGainChanged(self, source_idx, render_idx):
+#         self.add_update(
+#             source_idx,
+#             GainUpdate(
+#                 path=self.oscRenderPre[source_idx][render_idx],
+#                 soundobject=self.sources[source_idx],
+#                 render_idx=render_idx,
+#             ),
+#         )
 
 
 class SeamlessPlugin(SpatialRenderer):
@@ -875,7 +874,7 @@ class SeamlessPlugin(SpatialRenderer):
 
     def __init__(self, **kwargs):
         if not "dataformat" in kwargs.keys():
-            kwargs["dataformat"] = skc.xyz
+            kwargs["dataformat"] = "xyz"
         super(SeamlessPlugin, self).__init__(**kwargs)
 
         self.sourceAttributes = (
@@ -885,8 +884,7 @@ class SeamlessPlugin(SpatialRenderer):
 
         self.oscAddrs: dict = {}
 
-        for key in skc.fullformat[self.posFormat.value]:
-            self.oscAddrs[key] = "/source/pos/{}".format(key).encode()
+        self.oscAddrs[self.posFormat] = f"/source/pos/{self.posFormat}".encode()
 
         for vv in self.sourceAttributes:
             self.oscAddrs[vv.value] = "/{}".format(vv.value).encode()
@@ -920,16 +918,15 @@ class SeamlessPlugin(SpatialRenderer):
         )
 
     def sourcePositionChanged(self, source_idx):
-        for key in skc.fullformat[self.posFormat.value]:
-            self.add_update(
-                source_idx,
-                PositionUpdate(
-                    path=self.oscAddrs[key],
-                    soundobject=self.sources[source_idx],
-                    coord_fmt=skc.CoordFormats(key),
-                    source_index=source_idx + 1,
-                ),
-            )
+        self.add_update(
+            source_idx,
+            PositionUpdate(
+                path=self.oscAddrs[self.posFormat],
+                soundobject=self.sources[source_idx],
+                coord_fmt=self.posFormat,
+                source_index=source_idx + 1,
+            ),
+        )
 
 
 class DataClient(Audiorouter, SpatialRenderer):
@@ -940,7 +937,7 @@ renderer_name_dict = {
     "wonder": Wonder,
     # "panoramix": Panoramix,
     "viewclient": ViewClient,
-    "oscar": Oscar,
+    # "oscar": Oscar,
     "scengine": SuperColliderEngine,
     "audiorouter": Audiorouter,
     "seamlessplugin": SeamlessPlugin,
@@ -951,20 +948,20 @@ renderer_name_dict = {
 
 def createRendererClient(config: dict) -> Renderer:
 
-    # XXX some weird shit is happening here
-    if "dataformat" in config:
-        tmp_dataFormat = config["dataformat"]
-        if not tmp_dataFormat in skc.posformat.keys():
-            if len(tmp_dataFormat.split("_")) == 2:
-                preStr = ""
-                if tmp_dataFormat.split("_")[0] == "normcartesian":
-                    preStr = "n"
+    # (probably) a workaround for OSCAR, removed for now
+    # if "dataformat" in config:
+    #     tmp_dataFormat = config["dataformat"]
+    #     if not tmp_dataFormat in skc.posformat.keys():
+    #         if len(tmp_dataFormat.split("_")) == 2:
+    #             preStr = ""
+    #             if tmp_dataFormat.split("_")[0] == "normcartesian":
+    #                 preStr = "n"
 
-                dFo = preStr + tmp_dataFormat.split("_")[1]
-                config["dataformat"] = dFo
-            else:
-                log.warn("unknown position format")
-                del config["dataformat"]
+    #             dFo = preStr + tmp_dataFormat.split("_")[1]
+    #             config["dataformat"] = dFo
+    #         else:
+    #             log.warn("unknown position format")
+    #             del config["dataformat"]
 
     if "type" not in config:
         raise RendererException("Type of receiver unspecified")

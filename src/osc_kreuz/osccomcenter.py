@@ -7,6 +7,8 @@ from osc_kreuz.soundobject import SoundObject
 import ipaddress
 import logging
 
+from osc_kreuz.coordinates import get_all_coordinate_formats
+
 log = logging.getLogger("OSCcomcenter")
 
 
@@ -297,7 +299,7 @@ def setupOscBindings():
     n_sources = globalconfig["number_sources"]
 
     # Setup OSC Callbacks for positional data
-    for key in skc.posformat.keys():
+    for key in get_all_coordinate_formats():
 
         for addr in build_osc_paths(skc.OscPathType.Position, key):
             bindToDataAndUiPort(addr, partial(oscreceived_setPosition, key))
