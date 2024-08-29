@@ -104,7 +104,7 @@ class Coordinate:
     def set_coordinates(
         self,
         coordinates: CoordinateKey | list[CoordinateKey],
-        values: float | list[float],
+        values: float | Iterable[float],
         scaling_factor: float = 1.0,
     ) -> bool:
         """Sets values for all specified coordinates. values and coordinates need to be lists of the same length
