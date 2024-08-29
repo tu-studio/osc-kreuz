@@ -9,7 +9,7 @@ globalconfig:
   number_direct_sends: 46 # including subwoofer
   send_changes_only: 1 # checks every input for changes, if set to 1 might be slower
   data_port_timeout: 2 # time a change in the ui-port blocks incoming automation, set to 0 to deactivate this feature
-  render_units: ["ambi", "wfs", "reverb"]
+  render_units: ["ambi", "wfs"]
   room_scaling_factor: 1.0 # all incoming positon changes are scaled by this factor
 receivers:
   - type: audiorouter
