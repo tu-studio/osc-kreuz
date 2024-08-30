@@ -1,0 +1,34 @@
+global:
+  ip: 127.0.0.1
+  port_ui: 4455 # inputport for UI-Clients, blocks inputport_data for short time
+  port_data: 4007 # inputport for automation-data clients
+  port_settings: 4999 # global configs can be changed with this port
+  number_sources: 64
+  max_gain: 2 # max gain for the audiorouter
+  number_direct_sends: 46 # including subwoofer
+  send_changes_only: true # checks every input for changes, if set to 1 might be slower
+  data_port_timeout: 2 # time a change in the ui-port blocks incoming automation, set to 0 to deactivate this feature
+  render_units: ["ambi", "wfs"]
+  room_scaling_factor: 1.0 # all incoming positon changes are scaled by this factor
+receivers:
+  - type: audiomatrix
+    hosts:
+      - hostname: 127.0.0.1
+        port: 57122
+    paths:
+      - path: /source/gain/wfs
+        renderer: wfs
+        type: gain
+      - path: /source/gain/ambi
+        type: gain
+        renderer: ambi
+      - path: /source/pos
+        type: position
+        format: aed
+      - path: /source/xyz
+        type: pos
+        format: xyz
+
+    updateintervall: 5
+
+

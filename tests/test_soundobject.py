@@ -9,7 +9,6 @@ def test_scaling():
         "data_port_timeout": 0,
         "render_units": ["ambi", "wfs", "reverb"],
         "send_changes_only": False,
-        "min_dist": 0,
     }
 
     SoundObject.readGlobalConfig(global_conf)
@@ -35,7 +34,6 @@ def test_distance():
         "data_port_timeout": 0,
         "render_units": ["ambi", "wfs", "reverb"],
         "send_changes_only": False,
-        "min_dist": 0,
     }
 
     SoundObject.readGlobalConfig(global_conf)
