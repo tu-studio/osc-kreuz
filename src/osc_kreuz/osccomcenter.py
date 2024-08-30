@@ -149,9 +149,9 @@ def osc_handler_unsubscribe(*args) -> None:
             deleteClient(view_client, client_name)
 
         except KeyError:
-            log.warn(f"can't delete client {client_name}, it does not exist")
+            log.warning(f"can't delete client {client_name}, it does not exist")
     else:
-        log.warn("not enough arguments für view client")
+        log.warning("not enough arguments für view client")
 
 
 def oscreceived_dump(*args):
@@ -169,7 +169,7 @@ def deleteClient(viewC, alias):
         del clientSubscriptions[alias]
         log.info(f"removed client {alias}")
     except (ValueError, KeyError):
-        log.warn(f"tried to delete receiver {alias}, but it does not exist")
+        log.warning(f"tried to delete receiver {alias}, but it does not exist")
 
 
 def checkPort(port) -> bool:
@@ -428,9 +428,9 @@ def sourceLegit(id: int) -> bool:
     if verbosity > 0:
         if not indexInRange:
             if not type(id) == int:
-                log.warn("source index is no integer")
+                log.warning("source index is no integer")
             else:
-                log.warn("source index out of range")
+                log.warning("source index out of range")
     return indexInRange
 
 
@@ -439,9 +439,9 @@ def renderIndexLegit(id: int) -> bool:
     if verbosity > 0:
         if not indexInRange:
             if not type(id) == int:
-                log.warn("renderengine index is no integer")
+                log.warning("renderengine index is no integer")
             else:
-                log.warn("renderengine index out of range")
+                log.warning("renderengine index out of range")
     return indexInRange
 
 
@@ -450,9 +450,9 @@ def directSendLegit(id: int) -> bool:
     if verbosity > 0:
         if not indexInRange:
             if not type(id) == int:
-                log.warn("direct send index is no integer")
+                log.warning("direct send index is no integer")
             else:
-                log.warn("direct send index out of range")
+                log.warning("direct send index out of range")
     return indexInRange
 
 
