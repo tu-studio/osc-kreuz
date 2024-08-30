@@ -1,6 +1,7 @@
 from enum import Enum
 import numpy as np
 
+
 class OscPathType(Enum):
     Position = 1
     Properties = 2
@@ -67,10 +68,10 @@ class SourceAttributes(Enum):
 
 
 # global config keywords
-globalconfig = "globalconfig"
-inputport_data = "inputport_data"
-inputport_ui = "inputport_ui"
-inputport_settings = "inputport_settings"
+globalconfig = "global"
+inputport_data = "port_data"
+inputport_ui = "port_ui"
+inputport_settings = "port_settings"
 number_sources = "number_sources"
 max_gain = "max_gain"
 send_changes_only = "send_changes_only"
