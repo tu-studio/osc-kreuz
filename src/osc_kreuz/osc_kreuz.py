@@ -3,7 +3,7 @@
 from types import NoneType
 from typing import Callable
 import osc_kreuz.str_keys_conventions as skc
-
+from threading import Event
 from osc_kreuz.soundobject import SoundObject
 from osc_kreuz.renderer import Renderer
 import osc_kreuz.renderer as rendererclass
@@ -23,6 +23,7 @@ timeFormat = "%Y-%m-%d %H:%M:%S"
 logging.basicConfig(format=logFormat, datefmt=timeFormat, level=logging.INFO)
 log = logging.getLogger("main")
 
+stop_event = Event()
 
 # lists for constructing default config paths
 default_config_file_path = Path("osc-kreuz")
@@ -86,6 +87,10 @@ def read_config_option(
         return default
 
 
+def signal_handler(*args):
+    stop_event.set()
+
+
 def debug_prints(globalconfig, extendedOscInput, verbose):
     log.debug("max number of sources is set to %s", str(globalconfig["number_sources"]))
     log.debug("number of rendering units is %s", str(globalconfig["n_renderengines"]))
@@ -141,7 +146,6 @@ def debug_prints(globalconfig, extendedOscInput, verbose):
 @click.version_option()
 def main(config_path, oscdebug, verbose):
 
-    osccomcenter.setVerbosity(verbose)
     if verbose > 0:
         log.setLevel(logging.DEBUG)
 
@@ -155,30 +159,31 @@ def main(config_path, oscdebug, verbose):
         Renderer.createDebugClient(debugIp, debugPort)
         Renderer.debugCopy = True
 
-    # set extended OSC String Input Format (whatever that may be)
-    extendedOscInput = True
-    osccomcenter.extendedOscInput = extendedOscInput
+    # read config values
+    globalconfig = config[skc.globalconfig]
+    renderengines = read_config_option(
+        globalconfig, "render_units", None, ["ambi, wfs"]
+    )
+    numberofsources = read_config_option(globalconfig, "number_sources", int, 64)
+    room_scaling_factor = read_config_option(
+        globalconfig, "room_scaling_factor", float, 1.0
+    )
+    n_direct_sends = read_config_option(globalconfig, "number_direct_sends", int, 32)
+    ip = read_config_option(globalconfig, "ip", str, "127.0.0.1")
+    port_ui = read_config_option(globalconfig, "port_ui", int, 4455)
+    port_data = read_config_option(globalconfig, "port_data", int, 4007)
+    port_settings = read_config_option(globalconfig, "port_settings", int, 4999)
 
-    # prepare globalconfig
-    globalconfig = config["globalconfig"]
-
-    try:
-        n_renderunits = len(globalconfig["render_units"])
-    except KeyError:
-        n_renderunits = 0
+    n_renderunits = len(renderengines)
     globalconfig["n_renderengines"] = n_renderunits
 
     # set global config in objects
     SoundObject.readGlobalConfig(globalconfig)
     SoundObject.number_renderer = n_renderunits
     Renderer.globalConfig = globalconfig
-    osccomcenter.globalconfig = globalconfig
 
     # setup number of sources
-    numberofsources = read_config_option(globalconfig, "number_sources", int, 64)
-    room_scaling_factor = read_config_option(
-        globalconfig, "room_scaling_factor", float, 1.0
-    )
+
     Renderer.numberOfSources = numberofsources
 
     # Data initialisation
@@ -206,19 +211,32 @@ def main(config_path, oscdebug, verbose):
                 sys.exit(-1)
 
     # Setup OSC Com center
-    osccomcenter.soundobjects = soundobjects
-    osccomcenter.receivers = receivers
+    osc = osccomcenter.OSCComCenter(
+        soundobjects=soundobjects,
+        receivers=receivers,
+        renderengines=renderengines,
+        n_sources=numberofsources,
+        n_direct_sends=n_direct_sends,
+        ip=ip,
+        port_ui=port_ui,
+        port_data=port_data,
+        port_settings=port_settings,
+    )
+    osc.setupOscBindings()
+    osc.setVerbosity(verbose)
 
-    osccomcenter.setupOscBindings()
-
-    #
+    # TODO handle this somewhere else
+    extendedOscInput = True
     if verbose > 0:
         debug_prints(globalconfig, extendedOscInput, verbose)
 
     log.info("OSC router ready to use")
     log.info("have fun...")
 
-    signal.pause()
+    signal.signal(signal.SIGTERM, signal_handler)
+    # signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGUSR1, signal_handler)
+    stop_event.wait()
 
 
 if __name__ == "__main__":
