@@ -720,10 +720,11 @@ class ViewClient(SpatialRenderer):
             # self.receivers[0].send_message(b'/oscrouter/ping', [self.globalConfig['inputport_settings']])
             try:
                 self.receivers[0].send_message(
-                    b"/oscrouter/ping", [self.globalConfig["inputport_settings"]]
+                    b"/oscrouter/ping", [self.globalConfig[skc.inputport_settings]]
                 )  # , self.alias
-            except:
-                log.warn("error while pinging client ", self.alias, ", removing")
+            except Exception as e:
+                log.warning(e)
+                log.warning(f"error while pinging client { self.alias }, removing")
                 self.pingTimer.cancel()
                 deleteClient(self, self.alias)
 
