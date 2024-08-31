@@ -38,4 +38,17 @@ def test_conversions_aed_wraparound():
         assert np.allclose(xyz, xyz_calc)
 
 
+def test_conversions_aedrad_wraparound():
+    for aed, xyz in [
+        ((3 / 2 * np.pi, 0, 1), (0, -1, 0)),
+        ((2 * np.pi, 0, 1), (1, 0, 0)),
+        ((5 / 2 * np.pi, 0, 1), (0, 1, 0)),
+        ((-3 / 2 * np.pi, 0, 1), (0, 1, 0)),
+        ((-2 * np.pi, 0, 1), (1, 0, 0)),
+        ((-5 / 2 * np.pi, 0, 1), (0, -1, 0)),
+    ]:
+        xyz_calc = ct.aed2xyz(*aed, coordinates_in_degree=False)
+        assert np.allclose(xyz, xyz_calc)
+
+
 # TODO test normalized coordinate systems, aedrad
