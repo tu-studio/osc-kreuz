@@ -78,6 +78,16 @@ class SoundObject(object):
     def setPosition(
         self, coordinate_format_str: str, *values: float, fromUi: bool = True
     ) -> bool:
+        """Sets the position in the specified format, updates all coordinate formats
+
+        Args:
+            coordinate_format_str (str): string describing the coordinate format
+            *values (Iterable[int]):
+            fromUi (bool, optional): _description_. Defaults to True.
+
+        Returns:
+            bool: True if something changed
+        """
         if not self.shouldProcessInput(self.uiBlockingDict["position"], fromUi):
             return False
 
@@ -85,10 +95,12 @@ class SoundObject(object):
             coordinate_format_str
         )
 
+        # set the coordinates in the received format
         position_has_changed = self.position[coordinate_format].set_coordinates(
             coordinate_keys, values, self.coordinate_scaling_factor
         )
 
+        # set the coordinates for all other formats
         if position_has_changed:
             for c_fmt in self.position:
                 if c_fmt == coordinate_format:
@@ -96,6 +108,8 @@ class SoundObject(object):
                 self.position[c_fmt].set_all(
                     *(self.position[coordinate_format].convert_to(c_fmt))
                 )
+
+        # if set send position even if it did not change
         if not self.globalConfig[skc.send_changes_only]:
             position_has_changed = True
         return position_has_changed
