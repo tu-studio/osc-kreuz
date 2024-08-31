@@ -1,5 +1,7 @@
 from collections.abc import Callable
 from typing import Any
+
+from numpy import source
 from osc_kreuz.renderer import Renderer, ViewClient
 import osc_kreuz.str_keys_conventions as skc
 from oscpy.server import OSCThreadServer
@@ -308,46 +310,60 @@ class OSCComCenter:
         )
 
         # Setup OSC Callbacks for positional data
-        for key in get_all_coordinate_formats():
+        for coordinate_format in get_all_coordinate_formats():
 
-            for addr in self.build_osc_paths(skc.OscPathType.Position, key):
+            for addr in self.build_osc_paths(
+                skc.OscPathType.Position, coordinate_format
+            ):
                 self.bindToDataAndUiPort(
-                    addr, partial(self.oscreceived_setPosition, key)
+                    addr,
+                    partial(self.osc_handler_position, coord_fmt=coordinate_format),
                 )
 
             if self.extendedOscInput:
                 for i in range(self.n_sources):
                     idx = i + 1
                     for addr in self.build_osc_paths(
-                        skc.OscPathType.Position, key, idx=idx
+                        skc.OscPathType.Position, coordinate_format, idx=idx
                     ):
                         self.bindToDataAndUiPort(
                             addr,
-                            partial(self.oscreceived_setPositionForSource, key, i),
+                            partial(
+                                self.osc_handler_position,
+                                coord_fmt=coordinate_format,
+                                source_index=i,
+                            ),
                         )
 
         # Setup OSC for Wonder Attribute Paths
-        for key in skc.SourceAttributes:
-            for addr in self.build_osc_paths(skc.OscPathType.Properties, key.value):
+        for coordinate_format in skc.SourceAttributes:
+            for addr in self.build_osc_paths(
+                skc.OscPathType.Properties, coordinate_format.value
+            ):
                 log.info(f"WFS Attr path: {addr}")
                 self.bindToDataAndUiPort(
                     addr,
-                    partial(self.oscReceived_setValueForAttribute, key),
+                    partial(self.oscReceived_setValueForAttribute, coordinate_format),
                 )
 
             for i in range(self.n_sources):
                 idx = i + 1
                 for addr in self.build_osc_paths(
-                    skc.OscPathType.Properties, key.value, idx
+                    skc.OscPathType.Properties, coordinate_format.value, idx
                 ):
                     self.bindToDataAndUiPort(
                         addr,
-                        partial(self.oscreceived_setValueForSourceForAttribute, i, key),
+                        partial(
+                            self.oscreceived_setValueForSourceForAttribute,
+                            i,
+                            coordinate_format,
+                        ),
                     )
 
         # sendgain input
         for spatGAdd in ["/source/send/spatial", "/send/gain", "/source/send"]:
-            self.bindToDataAndUiPort(spatGAdd, partial(self.oscreceived_setRenderGain))
+            self.bindToDataAndUiPort(spatGAdd, partial(self.osc_handler_gain))
+            # self.bindToDataAndUiPort(spatGAdd, partial(self.oscreceived_setRenderGain))
 
         # Setup OSC Callbacks for all render units
         for rendIdx, render_unit in enumerate(self.renderengines):
@@ -357,7 +373,8 @@ class OSCComCenter:
             for addr in self.build_osc_paths(skc.OscPathType.Gain, render_unit):
                 self.bindToDataAndUiPort(
                     addr,
-                    partial(self.oscreceived_setRenderGainToRenderer, rendIdx),
+                    partial(self.osc_handler_gain, render_index=rendIdx),
+                    # partial(self.oscreceived_setRenderGainToRenderer, rendIdx),
                 )
 
             # add callback to extended paths
@@ -369,10 +386,15 @@ class OSCComCenter:
                     ):
                         self.bindToDataAndUiPort(
                             addr,
+                            # partial(
+                            #     self.oscreceived_setRenderGainForSourceForRenderer,
+                            #     i,
+                            #     rendIdx,
+                            # ),
                             partial(
-                                self.oscreceived_setRenderGainForSourceForRenderer,
-                                i,
-                                rendIdx,
+                                self.osc_handler_gain,
+                                source_index=i,
+                                render_index=rendIdx,
                             ),
                         )
 
@@ -471,66 +493,61 @@ class OSCComCenter:
                     log.warning("direct send index out of range")
         return indexInRange
 
-    def oscreceived_setPosition(self, coordKey, *args, fromUi=True):
-        try:
-            sIdx = int(args[0]) - 1
-        except ValueError:
-            return False
-
-        if self.sourceLegit(sIdx):
-            self.oscreceived_setPositionForSource(
-                coordKey, sIdx, *args[1:], fromUi=fromUi
-            )
-
-    def oscreceived_setPositionForSource(self, coordKey, sIdx: int, *args, fromUi=True):
-
-        if self.soundobjects[sIdx].setPosition(coordKey, *args, fromUi=fromUi):
-            self.notifyRenderClientsForUpdate(
-                "sourcePositionChanged", sIdx, fromUi=fromUi
-            )
-            # notifyRendererForSourcePosition(sIdx, fromUi)
-
-    # TODO why are there this many functions for doing almost the same thing?
-    def oscreceived_setRenderGain(self, *args, fromUi: bool = True):
-        try:
-            sIdx = int(args[0]) - 1
-        except ValueError:
-            return False
-
-        if self.sourceLegit(sIdx):
-            sIdx = int(sIdx)
-            self.oscreceived_setRenderGainForSource(sIdx, *args[1:], fromUi)
-
-    def oscreceived_setRenderGainToRenderer(
-        self, rIdx: int, *args, fromUi: bool = True
+    def osc_handler_position(
+        self, *args, coord_fmt: str = "xyz", source_index=-1, fromUi=True
     ):
+        args_index = 0
+
+        if source_index == -1:
+            try:
+                source_index = int(args[args_index]) - 1
+                args_index += 1
+            except ValueError:
+                return False
+
+        if not self.sourceLegit(source_index):
+            return False
+
+        if self.soundobjects[source_index].setPosition(
+            coord_fmt, *args[args_index:], fromUi=fromUi
+        ):
+            self.notifyRenderClientsForUpdate(
+                "sourcePositionChanged", source_index, fromUi=fromUi
+            )
+
+    def osc_handler_gain(
+        self, *args, source_index=-1, render_index=-1, fromUi: bool = True
+    ) -> bool:
+
+        args_index = 0
+
+        if source_index == -1:
+            try:
+                source_index = int(args[args_index]) - 1
+                args_index += 1
+            except ValueError:
+                return False
+
+        if render_index == -1:
+            try:
+                render_index = int(args[args_index])
+                args_index += 1
+            except ValueError:
+                return False
+
         try:
-            sIdx = int(args[0]) - 1
+            gain = float(args[args_index])
         except ValueError:
             return False
-        if self.renderIndexLegit(rIdx) and self.sourceLegit(sIdx):
-            rIdx = int(rIdx)
-            sIdx = int(sIdx)
-            self.oscreceived_setRenderGainForSourceForRenderer(
-                sIdx, rIdx, *args[1:], fromUi=fromUi
-            )
 
-    def oscreceived_setRenderGainForSource(self, sIdx: int, *args, fromUi: bool = True):
-        rIdx = args[0]
-        if self.renderIndexLegit(rIdx):
-            rIdx = int(rIdx)
-            self.oscreceived_setRenderGainForSourceForRenderer(
-                sIdx, rIdx, *args[1:], fromUi=fromUi
-            )
+        if not (self.sourceLegit(source_index) and self.renderIndexLegit(render_index)):
+            return False
 
-    def oscreceived_setRenderGainForSourceForRenderer(
-        self, sIdx: int, rIdx: int, *args, fromUi: bool = True
-    ):
-
-        if self.soundobjects[sIdx].setRendererGain(rIdx, args[0], fromUi):
+        if self.soundobjects[source_index].setRendererGain(render_index, gain, fromUi):
             self.notifyRenderClientsForUpdate(
-                "sourceRenderGainChanged", sIdx, rIdx, fromUi=fromUi
+                "sourceRenderGainChanged", source_index, render_index, fromUi=fromUi
             )
+        return True
 
     def oscreceived_setDirectSend(self, *args, fromUi: bool = True):
         try:
