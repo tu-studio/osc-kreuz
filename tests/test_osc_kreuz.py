@@ -1,12 +1,11 @@
 from itertools import product
+import itertools
 import logging
 import math
-import os
 from pathlib import Path
 import random
-import signal
 from threading import Event, Thread
-from time import sleep, time
+from time import sleep
 
 from click.testing import CliRunner
 from oscpy.client import OSCClient
@@ -25,9 +24,11 @@ from osc_kreuz.coordinates import (
 import numpy as np
 
 test_config = Path(__file__).parent / "assets" / "config_test.yml"
+
 config = read_config(test_config)
 
 n_sources = config["global"]["number_sources"]
+n_direct_sends = config["global"]["number_direct_sends"]
 renderers = config["global"]["render_units"]
 n_renderers = len(renderers)
 
@@ -78,11 +79,27 @@ def build_all_gain_paths():
 
 
 def test_gains():
+    port_ui = 4456
+    port_data = 4008
+    port_settings = 4998
+    port_listen = 9876
     # cli runner to run the actual osckreuz
     runner = CliRunner()
     osc_kreuz_thread = Thread(
         target=runner.invoke,
-        args=(main, ["-c", str(test_config.absolute().resolve())]),
+        args=(
+            main,
+            [
+                "-c",
+                str(test_config.absolute().resolve()),
+                "-u",
+                port_ui,
+                "-d",
+                port_data,
+                "-s",
+                port_settings,
+            ],
+        ),
     )
     osc_kreuz_thread.start()
 
@@ -90,11 +107,16 @@ def test_gains():
 
     # listener to receive osc from osc kreuz
     listener = SeamlessListener(
-        n_sources, "127.0.0.1", 9876, "127.0.0.1", 4999, "osckreuz_test"
+        n_sources,
+        "127.0.0.1",
+        port_listen,
+        "127.0.0.1",
+        port_settings,
+        "osckreuz_test",
     )
 
     # sender to send updates to osc-kreuz
-    sender = OSCClient("127.0.0.1", 4455)
+    sender = OSCClient("127.0.0.1", port_ui)
 
     # something changed to check if the update sent to the osc-kreuz also came back
     something_changed = Event()
@@ -120,12 +142,16 @@ def test_gains():
         assert val == True
         # standard epsilon is to fine grained
         assert math.isclose(
-            listener.sources[source_index].gain[renderer], expected_val, rel_tol=1e-06
+            listener.sources[source_index].gain[renderer],
+            expected_val,
+            rel_tol=1e-06,
         )
         print(f"success for gain path {path}")
     logging.info("unsubscribing")
     listener.unsubscribe_from_osc_kreuz()
     signal_handler()
+    sleep(0.2)
+
     logging.info("killed osc-kreuz")
 
 
@@ -152,17 +178,21 @@ def build_coordinate_test_path(
     args = []
     if not source_index_in_path:
         args.append(source_index + 1)
-    x = (random.random() - 0.5) * 10
 
+    # create the correct osc path
     path = path.format(val=coordinate_format_str, idx=source_index + 1)
 
+    # turn the initial coordinate into our coordinate class
     initial_coordinate = osc_kreuz.coordinates.CoordinateCartesian(
         initial_position.x, initial_position.y, initial_position.z
     )
-    # for coordinate_format_str in osc_kreuz.coordinates.get_all_coordinate_formats():
+
+    # parse the format string
     coordinate_system, coordinate_keys = osc_kreuz.coordinates.parse_coordinate_format(
         coordinate_format_str
     )
+
+    # create random coordinates for this coordinate type and append to args
     vals = [
         random_coords_for_coordinate_type(coordinate_system, key)
         for key in coordinate_keys
@@ -170,31 +200,54 @@ def build_coordinate_test_path(
 
     args.extend(vals)
 
+    # set the changed coordinates
     if coordinate_system == osc_kreuz.coordinates.CoordinateSystemType.Cartesian:
+        # if coordinates were cartesian originally, the new keys can just be replaced
         initial_coordinate.set_coordinates(coordinate_keys, vals)
     else:
+        # the coordinates have to be converted first
         conv_coordinates = initial_coordinate.convert_to(coordinate_system)
         if coordinate_system == osc_kreuz.coordinates.CoordinateSystemType.Polar:
             coords = osc_kreuz.coordinates.CoordinatePolar(*conv_coordinates)
         else:
             coords = osc_kreuz.coordinates.CoordinatePolarRadians(*conv_coordinates)
 
+        # set the changed coordinates
         coords.set_coordinates(coordinate_keys, vals)
 
+        # convert back to cartesian
         cart_coordinates = coords.convert_to(
             osc_kreuz.coordinates.CoordinateSystemType.Cartesian
         )
+
+        # replace initial coordinates
         initial_coordinate.set_all(*cart_coordinates)
 
     return (path, args, initial_coordinate.get_all())
 
 
 def test_full_positions():
+    port_ui = 4457
+    port_data = 4009
+    port_settings = 4997
+    port_listen = 9875
     # cli runner to run the actual osckreuz
     runner = CliRunner()
     osc_kreuz_thread = Thread(
         target=runner.invoke,
-        args=(main, ["-c", str(test_config.absolute().resolve())]),
+        args=(
+            main,
+            [
+                "-c",
+                str(test_config.absolute().resolve()),
+                "-u",
+                port_ui,
+                "-d",
+                port_data,
+                "-s",
+                port_settings,
+            ],
+        ),
     )
     osc_kreuz_thread.start()
 
@@ -202,11 +255,16 @@ def test_full_positions():
 
     # listener to receive osc from osc kreuz
     listener = SeamlessListener(
-        n_sources, "127.0.0.1", 9876, "127.0.0.1", 4999, "osckreuz_test"
+        n_sources,
+        "127.0.0.1",
+        port_listen,
+        "127.0.0.1",
+        port_settings,
+        "osckreuz_test",
     )
 
     # sender to send updates to osc-kreuz
-    sender = OSCClient("127.0.0.1", 4455)
+    sender = OSCClient("127.0.0.1", port_ui)
 
     # something changed to check if the update sent to the osc-kreuz also came back
     something_changed = Event()
@@ -239,11 +297,7 @@ def test_full_positions():
             source_index_in_path,
             listener.sources[source_index],
         )
-        before_xyz = (
-            listener.sources[source_index].x,
-            listener.sources[source_index].y,
-            listener.sources[source_index].z,
-        )
+
         sender.send_message(path.encode(), args)
         val = something_changed.wait(5)
 
@@ -257,12 +311,14 @@ def test_full_positions():
                 listener.sources[source_index].z,
             ),
             expected_xyz,
-            rtol=1e-3,
+            rtol=1e-6,
+            atol=1e-4,
         )
 
     logging.info("unsubscribing")
     listener.unsubscribe_from_osc_kreuz()
     signal_handler()
+    sleep(0.2)
     logging.info("killed osc-kreuz")
 
 
@@ -304,7 +360,7 @@ def test_positions():
         (path, False) for path in skc.osc_paths[skc.OscPathType.Position]["base"]
     ] + [(path, True) for path in skc.osc_paths[skc.OscPathType.Position]["extended"]]
     for (path, source_index_in_path), pos_format in product(
-        paths, osc_kreuz.coordinates.get_all_coordinate_formats()
+        paths, osc_kreuz.coordinates.get_all_coordinate_formats() * 50
     ):
         something_changed.clear()
         source_index = random.randint(0, n_sources - 1)
@@ -316,81 +372,201 @@ def test_positions():
             source_index_in_path,
             listener.sources[source_index],
         )
-        before_xyz = (
-            listener.sources[source_index].x,
-            listener.sources[source_index].y,
-            listener.sources[source_index].z,
-        )
+
         sender.send_message(path.encode(), args)
         val = something_changed.wait(5)
 
         assert val == True
-        # standard epsilon is to fine grained
+        # standard epsilon is too fine grained
 
-        try:
-            assert np.allclose(
-                (
-                    listener.sources[source_index].x,
-                    listener.sources[source_index].y,
-                    listener.sources[source_index].z,
-                ),
-                expected_xyz,
-                rtol=1e-4,
-            )
-        except AssertionError:
-            print(f"checking pos path {path}, {pos_format}")
-
-            print("before:   ", *before_xyz)
-            print(
-                "after:    ",
+        assert np.allclose(
+            (
                 listener.sources[source_index].x,
                 listener.sources[source_index].y,
                 listener.sources[source_index].z,
-            )
-            print("expected: ", *expected_xyz)
-            print("args: ", *args)
-
-            import matplotlib.pyplot as plt
-
-            fig = plt.figure()
-            ax = fig.add_subplot(1, 1, 1, projection="3d")
-            ax.plot(*zip(before_xyz, (0, 0, 0)), label="before")
-            ax.plot(
-                *zip(
-                    (
-                        listener.sources[source_index].x,
-                        listener.sources[source_index].y,
-                        listener.sources[source_index].z,
-                    ),
-                    (0, 0, 0),
-                ),
-                label="after",
-            )
-            ax.plot(*zip(expected_xyz, (0, 0, 0)), label="expected")
-
-            csystem, ckeys = coordinates.parse_coordinate_format(pos_format)
-            if csystem == CoordinateSystemType.PolarRadians:
-                c = CoordinatePolarRadians(0, 0, 1)
-            else:
-                c = CoordinatePolar(0, 0, 1)
-            c.set_coordinates(ckeys, args[-len(ckeys) :])
-            ax.plot(
-                *zip(c.convert_to(CoordinateSystemType.Cartesian), (0, 0, 0)),
-                label="change",
-            )
-
-            plt.legend()
-            plt.title(f"{pos_format}: {c.get_all()}")
-            plt.show()
-
-            raise
+            ),
+            expected_xyz,
+            rtol=1e-6,
+            atol=1e-4,
+        )
 
     logging.info("unsubscribing")
     listener.unsubscribe_from_osc_kreuz()
     signal_handler()
+    sleep(0.2)
+    logging.info("killed osc-kreuz")
+
+
+def test_direct_sends():
+    port_ui = 4458
+    port_data = 4010
+    port_settings = 4995
+    port_listen = 9873
+
+    # cli runner to run the actual osckreuz
+    runner = CliRunner()
+    osc_kreuz_thread = Thread(
+        target=runner.invoke,
+        args=(
+            main,
+            [
+                "-c",
+                str(test_config.absolute().resolve()),
+                "-u",
+                port_ui,
+                "-d",
+                port_data,
+                "-s",
+                port_settings,
+            ],
+        ),
+    )
+    osc_kreuz_thread.start()
+
+    sleep(0.5)
+
+    # listener to receive osc from osc kreuz
+    listener = SeamlessListener(
+        n_sources,
+        "127.0.0.1",
+        port_listen,
+        "127.0.0.1",
+        port_settings,
+        "osckreuz_test",
+    )
+
+    # sender to send updates to osc-kreuz
+    sender = OSCClient("127.0.0.1", port_ui)
+
+    # something changed to check if the update sent to the osc-kreuz also came back
+    something_changed = Event()
+
+    def osc_callback(*args):
+        print(args)
+        something_changed.set()
+
+    # setup listener
+    listener.register_direct_send_callback(osc_callback)
+    listener.start_listening()
+
+    sleep(0.5)
+    for _ in range(50):
+        something_changed.clear()
+
+        source_index = random.randint(0, n_sources - 1)
+        gain = random.random() * 2
+        direct_send_index = random.randint(0, n_direct_sends - 1)
+        path = b"/source/send/direct"
+
+        sender.send_message(path, (source_index + 1, direct_send_index, gain))
+
+        changed = something_changed.wait()
+
+        assert changed == True
+        assert math.isclose(
+            listener.sources[source_index].direct_sends[direct_send_index],
+            gain,
+            rel_tol=1e-06,
+        )
+
+    logging.info("unsubscribing")
+    listener.unsubscribe_from_osc_kreuz()
+    signal_handler()
+    sleep(0.2)
+
+    logging.info("killed osc-kreuz")
+
+
+def test_attributes():
+    port_ui = 4459
+    port_data = 4011
+    port_settings = 4993
+    port_listen = 9872
+
+    # cli runner to run the actual osckreuz
+    runner = CliRunner()
+    osc_kreuz_thread = Thread(
+        target=runner.invoke,
+        args=(
+            main,
+            [
+                "-c",
+                str(test_config.absolute().resolve()),
+                "-u",
+                port_ui,
+                "-d",
+                port_data,
+                "-s",
+                port_settings,
+            ],
+        ),
+    )
+    osc_kreuz_thread.start()
+
+    sleep(0.5)
+
+    # listener to receive osc from osc kreuz
+    listener = SeamlessListener(
+        n_sources,
+        "127.0.0.1",
+        port_listen,
+        "127.0.0.1",
+        port_settings,
+        "osckreuz_test",
+    )
+
+    # sender to send updates to osc-kreuz
+    sender = OSCClient("127.0.0.1", port_ui)
+
+    # something changed to check if the update sent to the osc-kreuz also came back
+    something_changed = Event()
+
+    def osc_callback(*args):
+        print(args)
+        something_changed.set()
+
+    # setup listener
+    listener.register_attribute_callback(osc_callback)
+    listener.start_listening()
+
+    sleep(0.5)
+    base_path = "/source/{attribute}"
+    indexed_path = "/source/{index}/{attribute}"
+    for attribute, use_base_path in itertools.product(
+        ["planewave", "doppler", "angle"], [True, False] * 20
+    ):
+
+        something_changed.clear()
+
+        source_index = random.randint(0, n_sources - 1)
+        val = random.random() * 2
+        if use_base_path:
+            path = base_path.format(attribute=attribute).encode()
+            args = (source_index + 1, val)
+        else:
+            path = indexed_path.format(
+                index=source_index + 1, attribute=attribute
+            ).encode()
+            args = (val,)
+        sender.send_message(path, args)
+
+        changed = something_changed.wait()
+
+        assert changed == True
+        assert math.isclose(
+            listener.sources[source_index].attributes[attribute],
+            val,
+            rel_tol=1e-06,
+        )
+
+    logging.info("unsubscribing")
+    listener.unsubscribe_from_osc_kreuz()
+    signal_handler()
+    sleep(0.2)
+
     logging.info("killed osc-kreuz")
 
 
 if __name__ == "__main__":
     # test_gains()
-    test_full_positions()
+    test_attributes()
