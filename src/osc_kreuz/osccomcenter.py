@@ -336,34 +336,36 @@ class OSCComCenter:
                         )
 
         # Setup OSC for Wonder Attribute Paths
-        for coordinate_format in skc.SourceAttributes:
+        # TODO add path without attribute name
+        for attribute in skc.SourceAttributes:
             for addr in self.build_osc_paths(
-                skc.OscPathType.Properties, coordinate_format.value
+                skc.OscPathType.Properties, attribute.value
             ):
                 log.info(f"WFS Attr path: {addr}")
                 self.bindToDataAndUiPort(
                     addr,
-                    partial(self.oscReceived_setValueForAttribute, coordinate_format),
+                    # partial(self.oscReceived_setValueForAttribute, attribute),
+                    partial(self.osc_handler_attribute, attribute=attribute),
                 )
 
             for i in range(self.n_sources):
                 idx = i + 1
                 for addr in self.build_osc_paths(
-                    skc.OscPathType.Properties, coordinate_format.value, idx
+                    skc.OscPathType.Properties, attribute.value, idx
                 ):
                     self.bindToDataAndUiPort(
                         addr,
                         partial(
-                            self.oscreceived_setValueForSourceForAttribute,
-                            i,
-                            coordinate_format,
+                            # self.oscreceived_setValueForSourceForAttribute,
+                            self.osc_handler_attribute,
+                            source_index=i,
+                            attribute=attribute,
                         ),
                     )
 
         # sendgain input
         for spatGAdd in ["/source/send/spatial", "/send/gain", "/source/send"]:
             self.bindToDataAndUiPort(spatGAdd, partial(self.osc_handler_gain))
-            # self.bindToDataAndUiPort(spatGAdd, partial(self.oscreceived_setRenderGain))
 
         # Setup OSC Callbacks for all render units
         for rendIdx, render_unit in enumerate(self.renderengines):
@@ -374,7 +376,6 @@ class OSCComCenter:
                 self.bindToDataAndUiPort(
                     addr,
                     partial(self.osc_handler_gain, render_index=rendIdx),
-                    # partial(self.oscreceived_setRenderGainToRenderer, rendIdx),
                 )
 
             # add callback to extended paths
@@ -400,7 +401,7 @@ class OSCComCenter:
 
         directSendAddr = "/source/send/direct"
         self.bindToDataAndUiPort(
-            directSendAddr, partial(self.oscreceived_setDirectSend)
+            directSendAddr, partial(self.osc_handler_direct_send_gain)
         )
 
         # XXX can this be removed?
@@ -549,74 +550,75 @@ class OSCComCenter:
             )
         return True
 
-    def oscreceived_setDirectSend(self, *args, fromUi: bool = True):
+    def osc_handler_direct_send_gain(
+        self, *args, source_index=-1, direct_send_index=-1, fromUi: bool = True
+    ):
+        args_index = 0
+        if source_index == -1:
+            try:
+                source_index = int(args[args_index]) - 1
+                args_index += 1
+            except ValueError:
+                return False
+
+        if direct_send_index == -1:
+            try:
+                direct_send_index = int(args[args_index])
+                args_index += 1
+            except ValueError:
+                return False
+
         try:
-            sIdx = int(args[0]) - 1
+            gain = float(args[args_index])
         except ValueError:
             return False
-        if self.sourceLegit(sIdx):
-            sIdx = int(sIdx)
-            self.oscreceived_setDirectSendForSource(sIdx, *args[1:], fromUi)
 
-    def oscreceived_setDirectSendForSource(self, sIdx: int, *args, fromUi: bool = True):
-        cIdx = args[0]
-        if self.directSendLegit(
-            cIdx
-        ):  # 0 <= cIdx < globalconfig['number_direct_sends']:
-            cIdx = int(cIdx)
-            self.oscreceived_setDirectSendForSourceForChannel(
-                sIdx, cIdx, *args[1:], fromUi
-            )
+        if not (
+            self.sourceLegit(source_index) and self.directSendLegit(direct_send_index)
+        ):
+            return False
 
-    def oscreceived_setDirectSendForSourceForChannel(
-        self, sIdx: int, cIdx: int, *args, fromUi: bool = True
-    ):
-        if self.soundobjects[sIdx].setDirectSend(cIdx, args[0], fromUi):
+        if self.soundobjects[source_index].setDirectSend(
+            direct_send_index, gain, fromUi
+        ):
             self.notifyRenderClientsForUpdate(
-                "sourceDirectSendChanged", sIdx, cIdx, fromUi=fromUi
+                "sourceDirectSendChanged",
+                source_index,
+                direct_send_index,
+                fromUi=fromUi,
             )
+        return True
 
-    # TODO: implement this thing
-    def notifyRendererForDirectsendGain(
-        self, sIdx: int, cIfx: int, fromUi: bool = True
+    def osc_handler_attribute(
+        self,
+        *args,
+        source_index=-1,
+        attribute: skc.SourceAttributes | None = None,
+        fromUi: bool = True,
     ):
-        pass
+        args_index = 0
+        if source_index == -1:
+            try:
+                source_index = int(args[args_index]) - 1
+                args_index += 1
+            except ValueError:
+                return False
 
-    def oscreceived_setAttribute(self, *args, fromUi: bool = True):
+        if attribute == None:
+            try:
+                attribute = skc.SourceAttributes(args[args_index])
+                args_index += 1
+            except ValueError:
+                return False
+
         try:
-            sIdx = int(args[0]) - 1
+            value = float(args[args_index])
         except ValueError:
             return False
-        if self.sourceLegit(sIdx):
-            sIdx = int(sIdx)
-            self.oscreceived_setAttributeForSource(sIdx, *args[1:], fromUi)
 
-    def oscreceived_setAttributeForSource(self, sIdx: int, *args, fromUi: bool = True):
-        attribute = args[0]
-        if attribute in skc.knownAttributes:
-            self.oscreceived_setValueForSourceForAttribute(
-                sIdx, attribute, *args[1:], fromUi
-            )
-
-    def oscReceived_setValueForAttribute(
-        self, attribute: skc.SourceAttributes, *args, fromUi: bool = True
-    ):
-        try:
-            sIdx = int(args[0]) - 1
-        except ValueError:
-            return False
-        if self.sourceLegit(sIdx):
-            sIdx = int(sIdx)
-            self.oscreceived_setValueForSourceForAttribute(
-                sIdx, attribute, *args[1:], fromUi
-            )
-
-    def oscreceived_setValueForSourceForAttribute(
-        self, sIdx: int, attribute: skc.SourceAttributes, *args, fromUi: bool = True
-    ):
-        if self.soundobjects[sIdx].setAttribute(attribute, args[0], fromUi):
+        if self.soundobjects[source_index].setAttribute(attribute, value, fromUi):
             self.notifyRenderClientsForUpdate(
-                "sourceAttributeChanged", sIdx, attribute, fromUi=fromUi
+                "sourceAttributeChanged", source_index, attribute, fromUi=fromUi
             )
 
     def notifyRenderClientsForUpdate(
@@ -625,30 +627,6 @@ class OSCComCenter:
         for receiver in self.receivers:
             updatFunc = getattr(receiver, updateFunction)
             updatFunc(*args)
-
-        # XXX why was this distinction made? dataClients were not included in receivers
-        # if fromUi:
-        #     for rend in dataClients:
-        #         updatFunc = getattr(rend, updateFunction)
-        #         updatFunc(*args)
-
-    ######
-    def oscreceived_sourceAttribute(self, attribute: skc.SourceAttributes, *args):
-
-        try:
-            sidx = int(args[0]) - 1
-        except ValueError:
-            return False
-        if sidx >= 0 and sidx < 64:
-            self.oscreceived_sourceAttribute_wString(sidx, attribute, args[1:])
-
-    def oscreceived_sourceAttribute_wString(
-        self, sidx: int, attribute: skc.SourceAttributes, *args
-    ):
-        sobject = self.soundobjects[sidx]
-        if sobject.setAttribute(attribute, args[0]):
-            for ren in self.receivers:
-                ren.sourceAttributeChanged(sidx, attribute)
 
     def printOSC(self, *args, addr: str = "", port: int = 0):
         if self.bPrintOSC:
