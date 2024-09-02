@@ -108,7 +108,6 @@ def debug_prints(globalconfig, extendedOscInput, verbose):
 @click.option("-v", "--verbose", count=True, help="increase verbosity level.")
 @click.version_option()
 def main(config_path, oscdebug, verbose, ip, port_ui, port_data, port_settings):
-    print(port_ui, port_data, port_settings)
     if verbose > 0:
         log.setLevel(logging.DEBUG)
 
