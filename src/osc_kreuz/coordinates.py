@@ -71,8 +71,7 @@ class Coordinate:
         self.position = {}
 
         # initialize position dict
-        for key, val in zip(position_keys, initial_values):
-            self.position[key] = val
+        self.set_all(*initial_values)
 
     def convert_to(
         self, coordinate_format: CoordinateSystemType
@@ -93,6 +92,8 @@ class Coordinate:
         for key, val in zip(self.position_keys, values):
             self.position[key] = val
 
+        self.validate_coordinates()
+
     def get_all(self) -> list[float]:
         """gets all coordinates in the order they were declared in the constructor
 
@@ -100,6 +101,13 @@ class Coordinate:
             list[float]: list of coordinates
         """
         return self.get_coordinates(self.position_keys)
+
+    def validate_coordinates(self):
+        """overwrite this function if for some coordinates special processing is required"""
+
+    def constrain_centered_coordinate(self, val, constrain_range):
+        half_range = constrain_range / 2
+        return ((val + half_range) % constrain_range) - half_range
 
     def set_coordinates(
         self,
@@ -129,7 +137,6 @@ class Coordinate:
         coordinate_changed = False
 
         for c_key, val in zip(coordinates, values):
-
             # scale coordinate if necessary
             if c_key in scalable_coordinates:
                 val = val * scaling_factor
@@ -141,7 +148,8 @@ class Coordinate:
                     coordinate_changed = True
             except KeyError:
                 raise CoordinateFormatException(f"Invalid Coordinate Key: {c_key}")
-
+        if coordinate_changed:
+            self.validate_coordinates()
         return coordinate_changed
 
     def get_coordinates(
@@ -181,6 +189,23 @@ class CoordinatePolar(Coordinate):
     def __init__(self, a, e, d) -> None:
         super().__init__([CoordinateKey.a, CoordinateKey.e, CoordinateKey.d], [a, e, d])
 
+    def validate_coordinates(self):
+
+        # constrain elev between -90 and +90
+        if not (-90 <= self.position[CoordinateKey.e] <= 90):
+            # first normalize between -180 and 180
+            new_e = ((self.position[CoordinateKey.e] + 180) % 360) - 180
+
+            if not (-90 <= self.position[CoordinateKey.e] <= 90):
+                self.position[CoordinateKey.a] += 180
+                self.position[CoordinateKey.e] = (-new_e) % 360 - 180
+
+        # constrain azim between -180 and 180
+        if not (-180 <= self.position[CoordinateKey.a] <= 180):
+            self.position[CoordinateKey.a] = (
+                (self.position[CoordinateKey.a] + 180) % 360
+            ) - 180
+
     def convert_to(
         self, coordinate_format: CoordinateSystemType
     ) -> list[float] | tuple[float, float, float]:
@@ -198,6 +223,24 @@ class CoordinatePolar(Coordinate):
 class CoordinatePolarRadians(Coordinate):
     def __init__(self, a, e, d) -> None:
         super().__init__([CoordinateKey.a, CoordinateKey.e, CoordinateKey.d], [a, e, d])
+
+    def validate_coordinates(self):
+
+        # constrain elev between -pi/2 and +pi/2
+        if not (-np.pi / 2 <= self.position[CoordinateKey.e] <= np.pi / 2):
+            # first normalize between -pi and pi
+            new_e = ((self.position[CoordinateKey.e] + np.pi) % (2 * np.pi)) - np.pi
+
+            # if new_e is still outside o
+            if not (-np.pi / 2 <= new_e <= np.pi / 2):
+                self.position[CoordinateKey.a] += np.pi
+                self.position[CoordinateKey.e] = ((-new_e) % (2 * np.pi)) - np.pi
+
+        # constrain azim between -pi and pi
+        if not (-np.pi <= self.position[CoordinateKey.a] <= np.pi):
+            self.position[CoordinateKey.a] = (
+                (self.position[CoordinateKey.a] + np.pi) % (2 * np.pi)
+            ) - np.pi
 
     def convert_to(
         self, coordinate_format: CoordinateSystemType
