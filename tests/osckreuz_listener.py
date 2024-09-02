@@ -11,6 +11,8 @@ log = logging.getLogger()
 
 
 n_renderers = 3
+n_direct_sends = 64
+attributes = ["doppler", "planewave", "angle"]
 
 
 @dataclass
@@ -20,6 +22,12 @@ class Source:
     y: float = 0
     z: float = 0
     gain: List[float] = field(default_factory=lambda: [0.0 for i in range(n_renderers)])
+    direct_sends: List[float] = field(
+        default_factory=lambda: [0.0 for i in range(n_direct_sends)]
+    )
+    attributes: dict[str, float] = field(
+        default_factory=lambda: dict([(attr, 0.0) for attr in attributes])
+    )
 
 
 class Watchdog(Exception):
@@ -69,6 +77,8 @@ class SeamlessListener:
             NoneType | Callable[[int, float, float, float], None]
         ) = None
         self.gain_callback: NoneType | Callable[[int, int, float], None] = None
+        self.attribute_callback: NoneType | Callable[[int, str, float], None] = None
+        self.direct_send_callback: NoneType | Callable[[int, int, float], None] = None
 
     # TODO reinitialize if no ping for x Seconds
 
@@ -77,6 +87,8 @@ class SeamlessListener:
         self.osc.bind(b"/oscrouter/ping", self.pong)
         self.osc.bind(b"/source/xyz", self.receive_xyz)
         self.osc.bind(b"/source/send", self.receive_gain)
+        self.osc.bind(b"/source/direct", self.receive_direct_send_gain)
+        self.osc.bind(b"/source/attribute", self.receive_attribute)
 
         self.subscribe_to_osc_kreuz()
 
@@ -93,6 +105,14 @@ class SeamlessListener:
 
     def register_gain_callback(self, callback: Callable[[int, int, float], None]):
         self.gain_callback = callback
+
+    def register_direct_send_callback(
+        self, callback: Callable[[int, int, float], None]
+    ):
+        self.direct_send_callback = callback
+
+    def register_attribute_callback(self, callback: Callable[[int, str, float], None]):
+        self.attribute_callback = callback
 
     def pong(self, *values):
         log.info("listener received ping")
@@ -127,6 +147,29 @@ class SeamlessListener:
 
         if self.gain_callback is not None:
             self.gain_callback(source_id, renderer_id, gain)
+
+    def receive_direct_send_gain(self, *values):
+        if len(values) != 3:
+            return
+        source_id = int(values[0])
+        direct_send_id = int(values[1])
+        gain = float(values[2])
+        self.sources[source_id].direct_sends[direct_send_id] = gain
+        print(self.sources[source_id].direct_sends)
+        if self.direct_send_callback is not None:
+            self.direct_send_callback(source_id, direct_send_id, gain)
+
+    def receive_attribute(self, *values):
+        if len(values) != 3:
+            return
+
+        source_id = int(values[0])
+        attr = bytes(values[1]).decode()
+        val = float(values[2])
+        self.sources[source_id].attributes[attr] = val
+
+        if self.attribute_callback is not None:
+            self.attribute_callback(source_id, attr, val)
 
     def subscribe_to_osc_kreuz(self):
         logging.info(
