@@ -11,8 +11,8 @@ from time import sleep, time
 from click.testing import CliRunner
 from oscpy.client import OSCClient
 
-from osc_kreuz import coordinates
-from osc_kreuz.osc_kreuz import main, read_config, read_config_option, signal_handler
+from osc_kreuz.config import read_config
+from osc_kreuz.osc_kreuz import main, signal_handler
 from osckreuz_listener import SeamlessListener, Source
 import osc_kreuz.str_keys_conventions as skc
 import osc_kreuz.coordinates

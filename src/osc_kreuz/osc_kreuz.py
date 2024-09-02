@@ -2,6 +2,7 @@
 
 from types import NoneType
 from typing import Callable
+from osc_kreuz.config import read_config, read_config_option
 import osc_kreuz.str_keys_conventions as skc
 from threading import Event
 from osc_kreuz.soundobject import SoundObject
