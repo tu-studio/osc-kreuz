@@ -2,6 +2,7 @@ from collections.abc import Callable
 from pathlib import Path
 import logging
 from types import NoneType
+from typing import TypeVar
 import yaml
 import osc_kreuz.str_keys_conventions as skc
 
@@ -63,9 +64,15 @@ def read_config(config_path) -> dict:
     return config
 
 
+T = TypeVar("T")
+
+
 def read_config_option(
-    config, option_name: str, option_type: Callable | NoneType = None, default=None
-):
+    config,
+    option_name: str,
+    option_type: Callable[..., T] | None = None,
+    default: T = None,
+) -> T:
     if option_name in config:
         pass
     elif option_name in deprecated_config_strings:

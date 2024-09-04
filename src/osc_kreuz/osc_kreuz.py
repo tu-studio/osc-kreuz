@@ -122,7 +122,7 @@ def main(config_path, oscdebug, verbose, ip, port_ui, port_data, port_settings):
         Renderer.debugCopy = True
 
     # read config values
-    globalconfig = read_config_option(config, skc.globalconfig, default=dict)
+    globalconfig = read_config_option(config, skc.globalconfig, default={})
 
     renderengines = read_config_option(
         globalconfig, "render_units", None, ["ambi, wfs"]
