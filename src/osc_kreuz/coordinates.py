@@ -179,6 +179,8 @@ class CoordinateCartesian(Coordinate):
             return conversions.xyz2aed(*self.get_all(), coordinates_in_degree=True)
         elif coordinate_format == CoordinateSystemType.PolarRadians:
             return conversions.xyz2aed(*self.get_all(), coordinates_in_degree=False)
+        elif coordinate_format == CoordinateSystemType.Cartesian:
+            return self.get_all()
         else:
             raise CoordinateFormatException(
                 f"Invalid Conversion format for Cartesion Coordinates: {coordinate_format}"
@@ -191,14 +193,11 @@ class CoordinatePolar(Coordinate):
 
     def validate_coordinates(self):
 
-        # constrain elev between -90 and +90
-        if not (-90 <= self.position[CoordinateKey.e] <= 90):
-            # first normalize between -180 and 180
-            new_e = ((self.position[CoordinateKey.e] + 180) % 360) - 180
-
-            if not (-90 <= self.position[CoordinateKey.e] <= 90):
-                self.position[CoordinateKey.a] += 180
-                self.position[CoordinateKey.e] = (-new_e) % 360 - 180
+        # constrain elevation between -180 and 180
+        if not (-180 <= self.position[CoordinateKey.e] <= 180):
+            self.position[CoordinateKey.e] = (
+                (self.position[CoordinateKey.e] + 180) % 360
+            ) - 180
 
         # constrain azim between -180 and 180
         if not (-180 <= self.position[CoordinateKey.a] <= 180):
@@ -214,6 +213,8 @@ class CoordinatePolar(Coordinate):
         elif coordinate_format == CoordinateSystemType.PolarRadians:
             a, e, d = self.get_all()
             return a / 180 * np.pi, e / 180 * np.pi, d
+        elif coordinate_format == CoordinateSystemType.Polar:
+            return self.get_all()
         else:
             raise CoordinateFormatException(
                 f"Invalid Conversion format for Polar Coordinates: {coordinate_format}"
@@ -226,15 +227,11 @@ class CoordinatePolarRadians(Coordinate):
 
     def validate_coordinates(self):
 
-        # constrain elev between -pi/2 and +pi/2
-        if not (-np.pi / 2 <= self.position[CoordinateKey.e] <= np.pi / 2):
-            # first normalize between -pi and pi
-            new_e = ((self.position[CoordinateKey.e] + np.pi) % (2 * np.pi)) - np.pi
-
-            # if new_e is still outside o
-            if not (-np.pi / 2 <= new_e <= np.pi / 2):
-                self.position[CoordinateKey.a] += np.pi
-                self.position[CoordinateKey.e] = ((-new_e) % (2 * np.pi)) - np.pi
+        # constrain elev between -pi and pi
+        if not (-np.pi <= self.position[CoordinateKey.e] <= np.pi):
+            self.position[CoordinateKey.e] = (
+                (self.position[CoordinateKey.e] + np.pi) % (2 * np.pi)
+            ) - np.pi
 
         # constrain azim between -pi and pi
         if not (-np.pi <= self.position[CoordinateKey.a] <= np.pi):
@@ -250,6 +247,8 @@ class CoordinatePolarRadians(Coordinate):
         elif coordinate_format == CoordinateSystemType.Polar:
             a, e, d = self.get_all()
             return a / np.pi * 180, e / np.pi * 180, d
+        elif coordinate_format == CoordinateSystemType.PolarRadians:
+            return self.get_all()
         else:
             raise CoordinateFormatException(
                 f"Invalid Conversion format for PolarRadians Coordinates: {coordinate_format}"
