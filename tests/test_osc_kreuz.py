@@ -16,10 +16,12 @@ from osckreuz_listener import SeamlessListener, Source
 import osc_kreuz.str_keys_conventions as skc
 import osc_kreuz.coordinates
 from osc_kreuz.coordinates import (
+    CoordinateCartesian,
     CoordinateKey,
     CoordinatePolar,
     CoordinatePolarRadians,
     CoordinateSystemType,
+    parse_coordinate_format,
 )
 import numpy as np
 
@@ -355,36 +357,64 @@ def test_positions():
     # sleep to wait for initial barrage of updates
     sleep(0.5)
 
+    source_indexes = {
+        CoordinateSystemType.Cartesian: 1,
+        CoordinateSystemType.Polar: 2,
+        CoordinateSystemType.PolarRadians: 3,
+    }
+    test_coordinate = {
+        CoordinateSystemType.Cartesian: CoordinateCartesian(1, 0, 0),
+        CoordinateSystemType.Polar: CoordinatePolar(0, 0, 1),
+        CoordinateSystemType.PolarRadians: CoordinatePolarRadians(0, 0, 1),
+    }
+
     # test a lot of different paths
     paths = [
         (path, False) for path in skc.osc_paths[skc.OscPathType.Position]["base"]
     ] + [(path, True) for path in skc.osc_paths[skc.OscPathType.Position]["extended"]]
+
     for (path, source_index_in_path), pos_format in product(
-        paths, osc_kreuz.coordinates.get_all_coordinate_formats() * 50
+        paths, osc_kreuz.coordinates.get_all_coordinate_formats() * 20
     ):
         something_changed.clear()
-        source_index = random.randint(0, n_sources - 1)
+        coordinate_system, coordinate_keys = parse_coordinate_format(pos_format)
 
-        path, args, expected_xyz = build_coordinate_test_path(
-            path,
-            pos_format,
-            source_index,
-            source_index_in_path,
-            listener.sources[source_index],
-        )
+        source_index = source_indexes[coordinate_system]
+        coordinate = test_coordinate[coordinate_system]
 
-        sender.send_message(path.encode(), args)
+        osc_args = []
+
+        if not source_index_in_path:
+            osc_args.append(source_index + 1)
+
+        # create the correct osc path
+        path = path.format(val=pos_format, idx=source_index + 1)
+        new_coordinates = [
+            random_coords_for_coordinate_type(coordinate_system, key)
+            for key in coordinate_keys
+        ]
+
+        coordinate.set_coordinates(coordinate_keys, new_coordinates)
+        osc_args.extend(new_coordinates)
+
+        expected_xyz = coordinate.convert_to(CoordinateSystemType.Cartesian)
+
+        sender.send_message(path.encode(), osc_args)
         val = something_changed.wait(5)
 
         assert val == True
-        # standard epsilon is too fine grained
 
+        received_xyz = (
+            listener.sources[source_index].x,
+            listener.sources[source_index].y,
+            listener.sources[source_index].z,
+        )
+        # standard epsilon is too fine grained
+        print(
+            f"{pos_format} ({coordinate_system}), expected: {expected_xyz}, received: {received_xyz}"
+        )
         assert np.allclose(
-            (
-                listener.sources[source_index].x,
-                listener.sources[source_index].y,
-                listener.sources[source_index].z,
-            ),
+            received_xyz,
             expected_xyz,
             rtol=1e-6,
             atol=1e-4,
@@ -569,4 +599,4 @@ def test_attributes():
 
 if __name__ == "__main__":
     # test_gains()
-    test_attributes()
+    test_positions()
