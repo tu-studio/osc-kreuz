@@ -1,17 +1,18 @@
-import numpy as np
-import osc_kreuz.str_keys_conventions as skc
-import osc_kreuz.conversionsTools as ct
 from functools import partial
 from time import time
 
+import numpy as np
+
+import osc_kreuz.conversionsTools as ct
 from osc_kreuz.coordinates import (
-    CoordinateSystemType,
-    parse_coordinate_format,
     Coordinate,
     CoordinateCartesian,
-    CoordinatePolarRadians,
     CoordinatePolar,
+    CoordinatePolarRadians,
+    CoordinateSystemType,
+    parse_coordinate_format,
 )
+import osc_kreuz.str_keys_conventions as skc
 
 _tt = "time"
 _uiBlock = "_uiDidBlock"

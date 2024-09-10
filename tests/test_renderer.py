@@ -1,12 +1,11 @@
 from osc_kreuz.renderer import (
-    Update,
-    GainUpdate,
-    PositionUpdate,
     AttributeUpdate,
     DirectSendUpdate,
+    GainUpdate,
+    PositionUpdate,
+    Update,
     wonderPlanewaveAttributeUpdate,
 )
-
 import osc_kreuz.renderer as r
 from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc

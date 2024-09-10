@@ -1,5 +1,6 @@
-import osc_kreuz.conversionsTools as ct
 import numpy as np
+
+import osc_kreuz.conversionsTools as ct
 
 
 def test_simple_conversions():

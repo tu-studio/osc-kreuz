@@ -4,6 +4,7 @@ from functools import lru_cache
 from itertools import chain, combinations
 
 import numpy as np
+
 import osc_kreuz.conversionsTools as conversions
 
 

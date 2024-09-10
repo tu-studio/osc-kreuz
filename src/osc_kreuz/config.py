@@ -1,13 +1,12 @@
 from collections.abc import Callable
-from pathlib import Path
-import logging
-from types import NoneType
-from typing import TypeVar
-import yaml
-import osc_kreuz.str_keys_conventions as skc
-
-# needed for reading the default config embedded into the package
 from importlib.resources import files
+import logging
+from pathlib import Path
+from typing import TypeVar
+
+import yaml
+
+import osc_kreuz.str_keys_conventions as skc
 
 
 log = logging.getLogger()
@@ -40,7 +39,6 @@ deprecated_config_strings = {
 def read_config(config_path) -> dict:
     # get Config Path:
     if config_path is None:
-        # TODO move to function
         # check different paths for a config file, with the highest one taking precedence
         for possible_config_path in (
             base / default_config_file_path / filename
@@ -53,7 +51,8 @@ def read_config(config_path) -> dict:
                 break
 
     if config_path is None:
-        log.warn(f"Could not find config, loading default config")
+        log.warning(f"Could not find config, loading default config")
+        # load the default config embedded into this package using files
         config_path = files("osc_kreuz").joinpath("config_default.yml")
         config = yaml.load(config_path.read_bytes(), Loader=yaml.Loader)
     else:

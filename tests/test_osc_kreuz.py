@@ -8,12 +8,10 @@ from threading import Event, Thread
 from time import sleep
 
 from click.testing import CliRunner
+import numpy as np
 from oscpy.client import OSCClient
 
 from osc_kreuz.config import read_config
-from osc_kreuz.osc_kreuz import main, signal_handler
-from osckreuz_listener import SeamlessListener, Source
-import osc_kreuz.str_keys_conventions as skc
 import osc_kreuz.coordinates
 from osc_kreuz.coordinates import (
     CoordinateCartesian,
@@ -23,7 +21,9 @@ from osc_kreuz.coordinates import (
     CoordinateSystemType,
     parse_coordinate_format,
 )
-import numpy as np
+from osc_kreuz.osc_kreuz import main, signal_handler
+import osc_kreuz.str_keys_conventions as skc
+from osckreuz_listener import SeamlessListener, Source
 
 test_config = Path(__file__).parent / "assets" / "config_test.yml"
 

@@ -1,11 +1,11 @@
-from asyncio import AbstractEventLoop
-from types import NoneType
-from oscpy.server import OSCThreadServer, ServerClass
-import signal
 from dataclasses import dataclass, field
-from typing import Callable, List, Coroutine
 import logging
+import signal
 from threading import Timer
+from types import NoneType
+from typing import Callable, List
+
+from oscpy.server import OSCThreadServer, ServerClass
 
 log = logging.getLogger()
 

@@ -1,15 +1,16 @@
 import random
+
+import numpy as np
+from pyfar import Coordinates
+
 from osc_kreuz.coordinates import (
     CoordinateCartesian,
+    CoordinateKey,
     CoordinatePolar,
     CoordinatePolarRadians,
     CoordinateSystemType,
-    CoordinateKey,
     parse_coordinate_format,
 )
-
-from pyfar import Coordinates
-import numpy as np
 
 
 def test_format_str_parsing():

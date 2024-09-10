@@ -1,15 +1,15 @@
+from collections.abc import Iterable
+from functools import partial
+import logging
+from threading import Event, Timer
+from time import time
+from typing import Any
+
 from numpy import iterable
-from osc_kreuz import soundobject
-from osc_kreuz.soundobject import SoundObject
-import osc_kreuz.str_keys_conventions as skc
 from oscpy.client import OSCClient
 
-from threading import Timer, Event
-from functools import partial
-from typing import Any, Callable
-from time import time
-from collections.abc import Iterable
-import logging
+from osc_kreuz.soundobject import SoundObject
+import osc_kreuz.str_keys_conventions as skc
 
 log = logging.getLogger("renderer")
 verbosity = 0

@@ -1,6 +1,6 @@
-from osc_kreuz.soundobject import SoundObject
-import osc_kreuz.str_keys_conventions as skc
 import numpy as np
+
+from osc_kreuz.soundobject import SoundObject
 
 
 def test_scaling():

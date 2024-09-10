@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
 
-from types import NoneType
-from typing import Callable
-from osc_kreuz.config import read_config, read_config_option
-import osc_kreuz.str_keys_conventions as skc
-from threading import Event
-from osc_kreuz.soundobject import SoundObject
-from osc_kreuz.renderer import Renderer
-import osc_kreuz.renderer as rendererclass
-import osc_kreuz.osccomcenter as osccomcenter
-
+import logging
 from pathlib import Path
+import signal
+import sys
+from threading import Event
 
 import click
-import signal
 import yaml
-import logging
-import sys
+
+from osc_kreuz.config import read_config, read_config_option
+import osc_kreuz.osccomcenter as osccomcenter
+from osc_kreuz.renderer import Renderer
+import osc_kreuz.renderer as rendererclass
+from osc_kreuz.soundobject import SoundObject
+import osc_kreuz.str_keys_conventions as skc
 
 logFormat = "%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]: %(message)s"
 timeFormat = "%Y-%m-%d %H:%M:%S"
