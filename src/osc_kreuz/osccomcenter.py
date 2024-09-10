@@ -1,16 +1,14 @@
 from collections.abc import Callable
-from typing import Any
-
-from numpy import source
-from osc_kreuz.renderer import Renderer, ViewClient
-import osc_kreuz.str_keys_conventions as skc
-from oscpy.server import OSCThreadServer
 from functools import partial
-from osc_kreuz.soundobject import SoundObject
 import ipaddress
 import logging
 
+from oscpy.server import OSCThreadServer
+
 from osc_kreuz.coordinates import get_all_coordinate_formats
+from osc_kreuz.renderer import Renderer, ViewClient
+from osc_kreuz.soundobject import SoundObject
+import osc_kreuz.str_keys_conventions as skc
 
 log = logging.getLogger("OSCcomcenter")
 
