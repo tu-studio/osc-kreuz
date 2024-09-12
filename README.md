@@ -21,7 +21,9 @@ when using the `versioned_install` flag the installation of multiple different v
 
 # OSC-Paths
 
-The osc-kreuz listens on a number of paths for position changes, gain changes and special properties for the wfs system. For most paths there exists a version of the path, where the index of the source that is changed is included in the path, and one where the index is sent as the first OSC argument.
+On port 4455 (default value) the osc-kreuz listens on a number of paths for [position changes](#positional-data), [gain changes](#gains) and [special properties](#special-properties) for the wfs system. For most paths there exists a version of the path, where the index of the source that is changed is included in the path, and one where the index is sent as the first OSC argument.
+
+Additionally there is the config port (4999) for the [subscription protocol](#subscription-protocol) and full copying of all outputs with the [debug mode](#debug-functions)
 
 ## Positional Data
 
@@ -70,6 +72,51 @@ Gains can be set individually for each rendering system, `[rendering_system]` ca
 
 Direct Sends also have an endpoint `/source/send/direct`, but it is not really used at the moment.
 
+## Subscription Protocol
+
+Subcription-Port: 4999
+
+The Subscription Protocol enables Applications to subscribe to the osc-kreuz.
+
+The connection is initialised by a subscricption request from the client which is followed by a regular ping-message from the osc-kreuz that must by answered by a pong-message in order to keep the subscription alive. Source-Position and gain messages should be sent to port 4455 and the subcription-messages to port 4999.
+
+### Subscribe
+
+A client can subscribe to all position and gain messages e.g. a viewer-client during production process. Subcriptions and pong messages should be send to port 4999.
+The connection is initialised via:
+`/oscrouer/subscribe s i s (i i)` with s = uniqueClientName, i=listeningPort, s=coordinateFormat, i=sourceIndexInOsc(0/1), i=minUpdateIntervall
+The last three arguments are optional and are set to '1 10' by default.
+e.g. `/oscrouter/subscribe maxViewer 55123 xyz 1 10`
+will send source-position messages to the subscribing client as follows:
+
+- For Position
+  `/source/1/xyz fff` with a max. rate of 100Hz (every 10 ms).
+- For gains e.g.
+  `/source/1/ambi f`
+
+The ip-Address of the client is retrieved automatically from the udp-packet by the OSC-Router.
+
+### ping-pong
+
+The osc-router regularly sends the message
+`/oscrouter/ping 4999` to all subscribed clients
+which should be answered (to port 4999) with
+`/oscrouter/pong uniqueClientName`
+The uniqueClientName has to be the same as in the subcription message.
+If the client does not answer to the ping message it will be erased after a certain time.
+
+## Debug functions
+
+Port: 4999
+
+A copy of all outgoing osc-messages from the osc-kreuz can requested by sending:
+`/oscrouter/debug/osccopy ipAddress:port` with ipAddress and listening port of the receiving machine e.g. `/oscrouter/debug/osccopy 192.168.3.2:55112`
+The debug-osc messages contain the name of the target as well as ip-address and port.
+To deactivate this send a message without target address: `/oscrouter/debug/osccopy`
+
+With the message `/oscrouter/debug/verbose i` a verbosity level can be set which activates console printing of incoming and outcoming messages as well as further informations.
+Set verbosity to 0 when to stop console output which can significantly slow down the system.
+
 # Configuration
 
 The configuration is done using a YAML-Config file, an example config file can be found in `example_configs`.
@@ -80,13 +127,12 @@ the `globalconfig`-Section of the Config contains general settings:
 
 | Setting               | Description                                                                                                                      | Default                   |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `oscr_ip`             | ip address the osc-kreuz listens on                                                                                              | 0.0.0.0                   |
-| `inputport_ui`        | Highest Priority listen-port intended for GUI applications                                                                       | 4455                      |
-| `inputport_data`      | lower priority port for listening to automated clients. pauses listening when data is received on `inputport_ui`                 | 4007                      |
-| `inputport_settings`  | global configs can be changed on this port                                                                                       | 4999                      |
+| `ip`                  | ip address the osc-kreuz listens on                                                                                              | 127.0.0.1                 |
+| `port_ui`             | Highest Priority listen-port intended for GUI applications                                                                       | 4455                      |
+| `port_data`           | lower priority port for listening to automated clients. pauses listening when data is received on `inputport_ui`                 | 4007                      |
+| `port_settings`       | global configs can be changed on this port                                                                                       | 4999                      |
 | `number_sources`      | number of source audio channels                                                                                                  | 64                        |
 | `max_gain`            | max gain for the audiorouter                                                                                                     | 2                         |
-| `min_dist`            |                                                                                                                                  | 0.001                     |
 | `number_direct_sends` | number of direct send channels                                                                                                   | 46                        |
 | `send_changes_only`   | only send when source data has changed,                                                                                          | true                      |
 | `data_port_timeout`   | when data is received on the ui port, the data port is paused for this timeout, in seconds, set to 0 to deactivate               | 2                         |

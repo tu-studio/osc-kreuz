@@ -1,89 +1,31 @@
 #!/usr/bin/env python3
 
-from types import NoneType
-from typing import Callable
-import osc_kreuz.str_keys_conventions as skc
-
-from osc_kreuz.soundobject import SoundObject
-from osc_kreuz.renderer import Renderer
-import osc_kreuz.renderer as rendererclass
-import osc_kreuz.osccomcenter as osccomcenter
-
+import logging
 from pathlib import Path
-from importlib.resources import files
+import signal
+import sys
+from threading import Event
 
 import click
-import signal
 import yaml
-import logging
-import sys
+
+from osc_kreuz.config import read_config, read_config_option
+import osc_kreuz.osccomcenter as osccomcenter
+from osc_kreuz.renderer import Renderer
+import osc_kreuz.renderer as rendererclass
+from osc_kreuz.soundobject import SoundObject
+import osc_kreuz.str_keys_conventions as skc
 
 logFormat = "%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]: %(message)s"
 timeFormat = "%Y-%m-%d %H:%M:%S"
 logging.basicConfig(format=logFormat, datefmt=timeFormat, level=logging.INFO)
 log = logging.getLogger("main")
 
-
-# lists for constructing default config paths
-default_config_file_path = Path("osc-kreuz")
-default_config_file_name_options = [
-    "osc-kreuz_conf.yml",
-    "osc-kreuz-conf.yml",
-    "osc-kreuz_config.yml",
-    "osc-kreuz-config.yml",
-    "config.yml",
-    "conf.yml",
-]
-default_config_file_locations = [
-    Path.home() / ".config",
-    Path("/etc"),
-    Path("/usr/local/etc"),
-]
+stop_event = Event()
 
 
-def read_config(config_path) -> dict:
-    # get Config Path:
-    if config_path is None:
-        # TODO move to function
-        # check different paths for a config file, with the highest one taking precedence
-        for possible_config_path in (
-            base / default_config_file_path / filename
-            for base in default_config_file_locations
-            for filename in default_config_file_name_options
-        ):
-            if possible_config_path.exists():
-                config_path = possible_config_path
-                log.info(f"Loading config file {config_path}")
-                break
-
-    if config_path is None:
-        log.warn(f"Could not find config, loading default config")
-        config_path = files("osc_kreuz").joinpath("config_default.yml")
-        config = yaml.load(config_path.read_bytes(), Loader=yaml.Loader)
-    else:
-        # read config file
-        with open(config_path) as f:
-            config = yaml.load(f, Loader=yaml.Loader)
-
-    return config
-
-
-def read_config_option(
-    config, option_name: str, option_type: Callable | NoneType = None, default=None
-):
-    if option_name in config:
-        val = config[option_name]
-
-        if option_type is None:
-            return val
-
-        try:
-            return option_type(val)
-        except Exception:
-            log.error(f"Could not read config option {option_name}")
-        return config[option_name]
-    else:
-        return default
+def signal_handler(*args):
+    stop_event.set()
 
 
 def debug_prints(globalconfig, extendedOscInput, verbose):
@@ -137,11 +79,33 @@ def debug_prints(globalconfig, extendedOscInput, verbose):
     help='ip and port for debug messages, e.g. "130.149.23.46:55112"',
     type=click.STRING,
 )
+@click.option(
+    "-i",
+    "--ip",
+    help="ip the osc_kreuz listens on, overrides the value read from the config",
+    type=click.STRING,
+)
+@click.option(
+    "-u",
+    "--port_ui",
+    help="port the osc_kreuz listens on for data input by a user, overrides the value read from the config",
+    type=click.INT,
+)
+@click.option(
+    "-d",
+    "--port_data",
+    help="port the osc_kreuz listens on for automated data, overrides the value read from the config",
+    type=click.INT,
+)
+@click.option(
+    "-s",
+    "--port_settings",
+    help="port the osc_kreuz listens on for settings, overrides the value read from the config",
+    type=click.INT,
+)
 @click.option("-v", "--verbose", count=True, help="increase verbosity level.")
 @click.version_option()
-def main(config_path, oscdebug, verbose):
-
-    osccomcenter.setVerbosity(verbose)
+def main(config_path, oscdebug, verbose, ip, port_ui, port_data, port_settings):
     if verbose > 0:
         log.setLevel(logging.DEBUG)
 
@@ -155,30 +119,37 @@ def main(config_path, oscdebug, verbose):
         Renderer.createDebugClient(debugIp, debugPort)
         Renderer.debugCopy = True
 
-    # set extended OSC String Input Format (whatever that may be)
-    extendedOscInput = True
-    osccomcenter.extendedOscInput = extendedOscInput
+    # read config values
+    globalconfig = read_config_option(config, skc.globalconfig, default={})
 
-    # prepare globalconfig
-    globalconfig = config["globalconfig"]
+    renderengines = read_config_option(
+        globalconfig, "render_units", None, ["ambi, wfs"]
+    )
+    numberofsources = read_config_option(globalconfig, "number_sources", int, 64)
+    room_scaling_factor = read_config_option(
+        globalconfig, "room_scaling_factor", float, 1.0
+    )
+    n_direct_sends = read_config_option(globalconfig, "number_direct_sends", int, 32)
+    if ip is None:
+        ip = read_config_option(globalconfig, "ip", str, "127.0.0.1")
+    if port_ui is None:
+        port_ui = read_config_option(globalconfig, "port_ui", int, 4455)
+    if port_data is None:
+        port_data = read_config_option(globalconfig, "port_data", int, 4007)
 
-    try:
-        n_renderunits = len(globalconfig["render_units"])
-    except KeyError:
-        n_renderunits = 0
+    if port_settings is None:
+        port_settings = read_config_option(globalconfig, "port_settings", int, 4999)
+
+    n_renderunits = len(renderengines)
     globalconfig["n_renderengines"] = n_renderunits
 
     # set global config in objects
     SoundObject.readGlobalConfig(globalconfig)
     SoundObject.number_renderer = n_renderunits
     Renderer.globalConfig = globalconfig
-    osccomcenter.globalconfig = globalconfig
 
     # setup number of sources
-    numberofsources = read_config_option(globalconfig, "number_sources", int, 64)
-    room_scaling_factor = read_config_option(
-        globalconfig, "room_scaling_factor", float, 1.0
-    )
+
     Renderer.numberOfSources = numberofsources
 
     # Data initialisation
@@ -206,19 +177,32 @@ def main(config_path, oscdebug, verbose):
                 sys.exit(-1)
 
     # Setup OSC Com center
-    osccomcenter.soundobjects = soundobjects
-    osccomcenter.receivers = receivers
+    osc = osccomcenter.OSCComCenter(
+        soundobjects=soundobjects,
+        receivers=receivers,
+        renderengines=renderengines,
+        n_sources=numberofsources,
+        n_direct_sends=n_direct_sends,
+        ip=ip,
+        port_ui=port_ui,
+        port_data=port_data,
+        port_settings=port_settings,
+    )
+    osc.setupOscBindings()
+    osc.setVerbosity(verbose)
 
-    osccomcenter.setupOscBindings()
-
-    #
+    # TODO handle this somewhere else
+    extendedOscInput = True
     if verbose > 0:
         debug_prints(globalconfig, extendedOscInput, verbose)
 
     log.info("OSC router ready to use")
     log.info("have fun...")
 
-    signal.pause()
+    signal.signal(signal.SIGTERM, signal_handler)
+    # signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGUSR1, signal_handler)
+    stop_event.wait()
 
 
 if __name__ == "__main__":

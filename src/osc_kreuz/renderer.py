@@ -1,14 +1,15 @@
+from collections.abc import Iterable
+from functools import partial
+import logging
+from threading import Event, Timer
+from time import time
+from typing import Any
+
 from numpy import iterable
-from osc_kreuz.soundobject import SoundObject
-import osc_kreuz.str_keys_conventions as skc
 from oscpy.client import OSCClient
 
-from threading import Timer, Event
-from functools import partial
-from typing import Any, Callable
-from time import time
-from collections.abc import Iterable
-import logging
+from osc_kreuz.soundobject import SoundObject
+import osc_kreuz.str_keys_conventions as skc
 
 log = logging.getLogger("renderer")
 verbosity = 0
@@ -147,11 +148,14 @@ class AttributeUpdate(Update):
         attribute: skc.SourceAttributes,
         soundobject: SoundObject,
         source_index: int | None = None,
+        include_attribute_name=False,
         pre_arg: Any = None,
         post_arg: Any = None,
     ):
         super().__init__(path, soundobject, source_index, pre_arg, post_arg)
         self.attribute = attribute
+        if include_attribute_name:
+            self.pre_arg = attribute.value
 
     def get_value(self):
         return self.soundobject.getAttribute(self.attribute)
@@ -720,10 +724,11 @@ class ViewClient(SpatialRenderer):
             # self.receivers[0].send_message(b'/oscrouter/ping', [self.globalConfig['inputport_settings']])
             try:
                 self.receivers[0].send_message(
-                    b"/oscrouter/ping", [self.globalConfig["inputport_settings"]]
+                    b"/oscrouter/ping", [self.globalConfig[skc.inputport_settings]]
                 )  # , self.alias
-            except:
-                log.warn("error while pinging client ", self.alias, ", removing")
+            except Exception as e:
+                log.warning(e)
+                log.warning(f"error while pinging client { self.alias }, removing")
                 self.pingTimer.cancel()
                 deleteClient(self, self.alias)
 
@@ -768,6 +773,32 @@ class ViewClient(SpatialRenderer):
                 render_idx=render_idx,
                 source_index=source_index_for_update,
                 include_render_idx=True,
+            ),
+        )
+
+    def sourceDirectSendChanged(self, source_idx, send_idx):
+        path = b"/source/direct"
+        self.add_update(
+            source_idx,
+            DirectSendUpdate(
+                path,
+                soundobject=self.sources[source_idx],
+                send_index=send_idx,
+                source_index=source_idx,
+                include_send_idx=True,
+            ),
+        )
+
+    def sourceAttributeChanged(self, source_idx, attribute):
+        path = b"/source/attribute"
+        self.add_update(
+            source_idx,
+            AttributeUpdate(
+                path,
+                attribute,
+                soundobject=self.sources[source_idx],
+                source_index=source_idx,
+                include_attribute_name=True,
             ),
         )
 

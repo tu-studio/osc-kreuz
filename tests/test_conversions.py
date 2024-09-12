@@ -1,5 +1,6 @@
-import osc_kreuz.conversionsTools as ct
 import numpy as np
+
+import osc_kreuz.conversionsTools as ct
 
 
 def test_simple_conversions():
@@ -35,6 +36,19 @@ def test_conversions_aed_wraparound():
         ((-450, 0, 1), (0, -1, 0)),
     ]:
         xyz_calc = ct.conv_pol2cart(*aed)
+        assert np.allclose(xyz, xyz_calc)
+
+
+def test_conversions_aedrad_wraparound():
+    for aed, xyz in [
+        ((3 / 2 * np.pi, 0, 1), (0, -1, 0)),
+        ((2 * np.pi, 0, 1), (1, 0, 0)),
+        ((5 / 2 * np.pi, 0, 1), (0, 1, 0)),
+        ((-3 / 2 * np.pi, 0, 1), (0, 1, 0)),
+        ((-2 * np.pi, 0, 1), (1, 0, 0)),
+        ((-5 / 2 * np.pi, 0, 1), (0, -1, 0)),
+    ]:
+        xyz_calc = ct.aed2xyz(*aed, coordinates_in_degree=False)
         assert np.allclose(xyz, xyz_calc)
 
 

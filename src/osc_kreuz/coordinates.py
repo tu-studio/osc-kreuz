@@ -4,6 +4,7 @@ from functools import lru_cache
 from itertools import chain, combinations
 
 import numpy as np
+
 import osc_kreuz.conversionsTools as conversions
 
 
@@ -71,8 +72,7 @@ class Coordinate:
         self.position = {}
 
         # initialize position dict
-        for key, val in zip(position_keys, initial_values):
-            self.position[key] = val
+        self.set_all(*initial_values)
 
     def convert_to(
         self, coordinate_format: CoordinateSystemType
@@ -93,6 +93,8 @@ class Coordinate:
         for key, val in zip(self.position_keys, values):
             self.position[key] = val
 
+        self.validate_coordinates()
+
     def get_all(self) -> list[float]:
         """gets all coordinates in the order they were declared in the constructor
 
@@ -100,6 +102,13 @@ class Coordinate:
             list[float]: list of coordinates
         """
         return self.get_coordinates(self.position_keys)
+
+    def validate_coordinates(self):
+        """overwrite this function if for some coordinates special processing is required"""
+
+    def constrain_centered_coordinate(self, val, constrain_range):
+        half_range = constrain_range / 2
+        return ((val + half_range) % constrain_range) - half_range
 
     def set_coordinates(
         self,
@@ -129,7 +138,6 @@ class Coordinate:
         coordinate_changed = False
 
         for c_key, val in zip(coordinates, values):
-
             # scale coordinate if necessary
             if c_key in scalable_coordinates:
                 val = val * scaling_factor
@@ -141,7 +149,8 @@ class Coordinate:
                     coordinate_changed = True
             except KeyError:
                 raise CoordinateFormatException(f"Invalid Coordinate Key: {c_key}")
-
+        if coordinate_changed:
+            self.validate_coordinates()
         return coordinate_changed
 
     def get_coordinates(
@@ -171,6 +180,8 @@ class CoordinateCartesian(Coordinate):
             return conversions.xyz2aed(*self.get_all(), coordinates_in_degree=True)
         elif coordinate_format == CoordinateSystemType.PolarRadians:
             return conversions.xyz2aed(*self.get_all(), coordinates_in_degree=False)
+        elif coordinate_format == CoordinateSystemType.Cartesian:
+            return self.get_all()
         else:
             raise CoordinateFormatException(
                 f"Invalid Conversion format for Cartesion Coordinates: {coordinate_format}"
@@ -181,6 +192,20 @@ class CoordinatePolar(Coordinate):
     def __init__(self, a, e, d) -> None:
         super().__init__([CoordinateKey.a, CoordinateKey.e, CoordinateKey.d], [a, e, d])
 
+    def validate_coordinates(self):
+
+        # constrain elevation between -180 and 180
+        if not (-180 <= self.position[CoordinateKey.e] <= 180):
+            self.position[CoordinateKey.e] = (
+                (self.position[CoordinateKey.e] + 180) % 360
+            ) - 180
+
+        # constrain azim between -180 and 180
+        if not (-180 <= self.position[CoordinateKey.a] <= 180):
+            self.position[CoordinateKey.a] = (
+                (self.position[CoordinateKey.a] + 180) % 360
+            ) - 180
+
     def convert_to(
         self, coordinate_format: CoordinateSystemType
     ) -> list[float] | tuple[float, float, float]:
@@ -189,6 +214,8 @@ class CoordinatePolar(Coordinate):
         elif coordinate_format == CoordinateSystemType.PolarRadians:
             a, e, d = self.get_all()
             return a / 180 * np.pi, e / 180 * np.pi, d
+        elif coordinate_format == CoordinateSystemType.Polar:
+            return self.get_all()
         else:
             raise CoordinateFormatException(
                 f"Invalid Conversion format for Polar Coordinates: {coordinate_format}"
@@ -199,6 +226,20 @@ class CoordinatePolarRadians(Coordinate):
     def __init__(self, a, e, d) -> None:
         super().__init__([CoordinateKey.a, CoordinateKey.e, CoordinateKey.d], [a, e, d])
 
+    def validate_coordinates(self):
+
+        # constrain elev between -pi and pi
+        if not (-np.pi <= self.position[CoordinateKey.e] <= np.pi):
+            self.position[CoordinateKey.e] = (
+                (self.position[CoordinateKey.e] + np.pi) % (2 * np.pi)
+            ) - np.pi
+
+        # constrain azim between -pi and pi
+        if not (-np.pi <= self.position[CoordinateKey.a] <= np.pi):
+            self.position[CoordinateKey.a] = (
+                (self.position[CoordinateKey.a] + np.pi) % (2 * np.pi)
+            ) - np.pi
+
     def convert_to(
         self, coordinate_format: CoordinateSystemType
     ) -> list[float] | tuple[float, float, float]:
@@ -207,6 +248,8 @@ class CoordinatePolarRadians(Coordinate):
         elif coordinate_format == CoordinateSystemType.Polar:
             a, e, d = self.get_all()
             return a / np.pi * 180, e / np.pi * 180, d
+        elif coordinate_format == CoordinateSystemType.PolarRadians:
+            return self.get_all()
         else:
             raise CoordinateFormatException(
                 f"Invalid Conversion format for PolarRadians Coordinates: {coordinate_format}"

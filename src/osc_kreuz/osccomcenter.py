@@ -1,622 +1,631 @@
-from typing import Any
-from osc_kreuz.renderer import Renderer, ViewClient
-import osc_kreuz.str_keys_conventions as skc
-from oscpy.server import OSCThreadServer
+from collections.abc import Callable
 from functools import partial
-from osc_kreuz.soundobject import SoundObject
 import ipaddress
 import logging
 
+from oscpy.server import OSCThreadServer
+
 from osc_kreuz.coordinates import get_all_coordinate_formats
+from osc_kreuz.renderer import Renderer, ViewClient
+from osc_kreuz.soundobject import SoundObject
+import osc_kreuz.str_keys_conventions as skc
 
 log = logging.getLogger("OSCcomcenter")
 
 
-soundobjects: list[SoundObject] = []
-
-clientSubscriptions: dict[str, ViewClient] = {}
-receivers: list[Renderer] = []
-globalconfig: dict[str, Any] = dict()
-extendedOscInput = True
-verbosity = 0
-bPrintOSC = False
-
-
-def setVerbosity(v: int):
-    global verbosity, bPrintOSC
-    verbosity = v
-    bPrintOSC = v >= 2
-    Renderer.setVerbosity(v)
-    log.debug("verbosity set to", v)
-
-
-osc_ui_server = OSCThreadServer()
-osc_data_server = OSCThreadServer()
-osc_setting_server = OSCThreadServer()
-
-
-oscr_ip = False
-
-
-def setupOscSettingsBindings():
-    osc_setting_server.listen(
-        address="0.0.0.0", port=globalconfig["inputport_settings"], default=True
-    )
-
-    osc_setting_server.bind(
-        "/oscrouter/debug/osccopy".encode(), oscreceived_debugOscCopy
-    )
-    osc_setting_server.bind("/oscrouter/debug/verbose".encode(), oscreceived_verbose)
-    osc_setting_server.bind(
-        "/oscrouter/subscribe".encode(), oscreceived_subscriptionRequest
-    )
-    osc_setting_server.bind("/oscrouter/unsubscribe".encode(), osc_handler_unsubscribe)
-    osc_setting_server.bind("/oscrouter/ping".encode(), oscreceived_ping)
-    osc_setting_server.bind("/oscrouter/pong".encode(), oscreceived_pong)
-    osc_setting_server.bind("/oscrouter/dump".encode(), oscreceived_dump)
-
-    global oscr_ip
-    if "oscr_ip" in globalconfig.keys() and checkIp(globalconfig["oscr_ip"]):
-        oscr_ip = globalconfig["oscr_ip"].encode()
-
-
-def oscreceived_ping(*args):
-
-    if checkPort(args[0]):
-        vals = [oscr_ip] if oscr_ip else []
-        osc_setting_server.answer(b"/oscrouter/pong", port=args[0], values=vals)
-
-
-def oscreceived_pong(*args):
-
-    try:
-        clientName = args[0]
-        clientSubscriptions[clientName].receivedIsAlive()
-    except:
-        if verbosity > 0:
-            _name = ""
-            if len(args) > 0:
-                _name = args[0]
-            log.info("no renderer for pong message {}".format(_name))
-
-
-def oscreceived_subscriptionRequest(*args) -> None:
-    """OSC Callback for subscription Requests.
-
-    These requests follow the format:
-    /oscrouter/subscribe myname 31441 xyz 0 5
-    /oscrouter/subscribe [client_name] [client_port] [coordinate_format] [source index as value? (0 or 1)] [update rate]
-    args[0] nameFor Client
-    args[1] port client listens to
-    args[2] format client expects
-    args[3] send source index as value instead of inside the osc prefix
-    args[4] source position update rate
-    """
-
-    viewClientInitValues = {}
-    vCName = args[0]
-    subArgs = len(args)
-    if subArgs >= 2:
-        if checkPort(args[1]):
-            viewClientInitValues["port"] = args[1]
-
-            _ip = osc_setting_server.get_sender()[1]
-
-            viewClientInitValues["hostname"] = _ip
-
-            # if subArgs>2:
-            #     initKeys = ['dataformat', 'indexAsValue', 'updateintervall']
-            #     for i in range(2, subArgs):
-            #         viewClientInitValues[initKeys[i-2]] = args[i]
-            try:
-                viewClientInitValues["dataformat"] = args[2].decode()
-            except:
-                pass
-            try:
-                viewClientInitValues["indexAsValue"] = args[3]
-            except:
-                pass
-            try:
-                viewClientInitValues["updateintervall"] = args[4]
-            except:
-                pass
-        newViewClient = ViewClient(vCName, **viewClientInitValues)
-
-        clientSubscriptions[vCName] = newViewClient
-        # TODO check if this is threadsafe (it probably isn't)
-        receivers.append(newViewClient)
-        newViewClient.checkAlive(deleteClient)
-
-    else:
-        if verbosity > 0:
-            log.info("not enough arguments für view client")
-
-
-def osc_handler_unsubscribe(*args) -> None:
-    """OSC Callback for unsubscribe Requests.
-
-    These requests follow the format:
-    /oscrouter/unsubscribe myname
-    /oscrouter/unsubscribe [client_name]
-    args[0] nameFor Client
-    """
-
-    subArgs = len(args)
-    if len(args) >= 1:
-        client_name = args[0]
-        try:
-            view_client = clientSubscriptions[client_name]
-            deleteClient(view_client, client_name)
-
-        except KeyError:
-            log.warn(f"can't delete client {client_name}, it does not exist")
-    else:
-        log.warn("not enough arguments für view client")
-
-
-def oscreceived_dump(*args):
-    pass
-    # TODO: dump all source data to renderer
-
-
-def deleteClient(viewC, alias):
-    # TODO check if this is threadsafe (it probably isn't)
-    # TODO handle client with same name connection/reconnecting. maybe add ip as composite key?
-    if verbosity > 0:
-        log.info(f"deleting client {viewC}, {alias}")
-    try:
-        receivers.remove(viewC)
-        del clientSubscriptions[alias]
-        log.info(f"removed client {alias}")
-    except (ValueError, KeyError):
-        log.warn(f"tried to delete receiver {alias}, but it does not exist")
-
-
-def checkPort(port) -> bool:
-    if type(port) == int and 1023 < port < 65535:
-        return True
-    else:
-        if verbosity > 0:
-            log.info(f"port {port} not legit")
-        return False
-
-
-def checkIp(ip) -> bool:
-    ipalright = True
-    try:
-        _ip = "127.0.0.1" if ip == "localhost" else ip
-        _ = ipaddress.ip_address(_ip)
-    except:
-        ipalright = False
-        if verbosity > 0:
-            log.info(f"ip address {ip} not legit")
-
-    return ipalright
-
-
-def checkIpAndPort(ip, port) -> bool:
-    return checkIp(ip) and checkPort(port)
-
-
-def oscreceived_debugOscCopy(*args):
-    ip = ""
-    port = 0
-    if len(args) == 2:
-        ip = args[0].decode()
-        port = args[1]
-    elif len(args) == 1:
-        ipport = args[0].decode().split(":")
-        if len(ipport) == 2:
-            ip = ipport[0]
-            port = ipport[1]
-    else:
-        Renderer.debugCopy = False
-        log.info("debug client: invalid message format")
-        return
-    try:
-        ip = "127.0.0.1" if ip == "localhost" else ip
-        osccopy_ip = ipaddress.ip_address(ip)
-        osccopy_port = int(port)
-    except:
-        log.info("debug client: invalid ip or port")
-        return
-    log.info(f"debug client connected: {ip}:{port}")
-
-    if 1023 < osccopy_port < 65535:
-        Renderer.createDebugClient(str(osccopy_ip), osccopy_port)
-        Renderer.debugCopy = True
-        return
-
-    Renderer.debugCopy = False
-
-
-def oscreceived_verbose(*args):
-    vvvv = -1
-    try:
-        vvvv = int(args[0])
-    except:
-        setVerbosity(0)
-        # verbosity = 0
-        # Renderer.setVerbosity(0)
-        log.error("wrong verbosity argument")
-        return
-
-    if 0 <= vvvv <= 2:
-        setVerbosity(vvvv)
-        # global verbosity
-        # verbosity = vvvv
-        # Renderer.setVerbosity(vvvv)
-    else:
-        setVerbosity(0)
-
-
-def build_osc_paths(
-    osc_path_type: skc.OscPathType, value: str, idx: int | None = None
-) -> list[str]:
-    """Builds a list of all needed osc paths for a given osc path Type and the value.
-    If idx is supplied, the extended path is used. Aliases for the value are handled
-
-    Args:
-        osc_path_type (skc.OscPathType): Osc Path Type
-        value (str): value to be written into the OSC strings.
-        idx (int | None, optional): Index of the source if the extended format should be used. Defaults to None.
-
-    Raises:
-        KeyError: Raised when the Osc Path Type does not exist
-
-    Returns:
-        list[str]: list of OSC path strings
-    """
-    if osc_path_type not in skc.osc_paths:
-        raise KeyError(f"Invalid OSC Path Type: {osc_path_type}")
-    try:
-        aliases = skc.osc_aliases[value]
-    except KeyError:
-        aliases = [value]
-
-    if idx is None:
-        paths = skc.osc_paths[osc_path_type]["base"]
-    else:
-        paths = skc.osc_paths[osc_path_type]["extended"]
-
-    return [path.format(val=alias, idx=idx) for alias in aliases for path in paths]
-
-
-def setupOscBindings():
-    """Sets up all Osc Bindings"""
-    setupOscSettingsBindings()
-
-    osc_ui_server.listen(
-        address="0.0.0.0", port=globalconfig[skc.inputport_ui], default=True
-    )
-    osc_data_server.listen(
-        address="0.0.0.0", port=globalconfig[skc.inputport_data], default=True
-    )
-
-    log.info(
-        f"listening on port {globalconfig[skc.inputport_ui]} for data, {globalconfig[skc.inputport_settings]} for settings"
-    )
-    n_sources = globalconfig["number_sources"]
-
-    # Setup OSC Callbacks for positional data
-    for key in get_all_coordinate_formats():
-
-        for addr in build_osc_paths(skc.OscPathType.Position, key):
-            bindToDataAndUiPort(addr, partial(oscreceived_setPosition, key))
-
-        if extendedOscInput:
-            for i in range(n_sources):
-                idx = i + 1
-                for addr in build_osc_paths(skc.OscPathType.Position, key, idx=idx):
-                    bindToDataAndUiPort(
-                        addr, partial(oscreceived_setPositionForSource, key, i)
-                    )
-
-    # Setup OSC for Wonder Attribute Paths
-    for key in skc.SourceAttributes:
-        for addr in build_osc_paths(skc.OscPathType.Properties, key.value):
-            log.info(f"WFS Attr path: {addr}")
-            bindToDataAndUiPort(addr, partial(oscReceived_setValueForAttribute, key))
-
-        for i in range(n_sources):
-            idx = i + 1
-            for addr in build_osc_paths(skc.OscPathType.Properties, key.value, idx):
-                bindToDataAndUiPort(
-                    addr, partial(oscreceived_setValueForSourceForAttribute, i, key)
-                )
-
-    # sendgain input
-    for spatGAdd in ["/source/send/spatial", "/send/gain", "/source/send"]:
-        bindToDataAndUiPort(spatGAdd, partial(oscreceived_setRenderGain))
-
-    # get list of all render units
-    try:
-        render_units = globalconfig["render_units"]
-    except KeyError:
-        render_units = []
-
-    # Setup OSC Callbacks for all render units
-    for rendIdx, render_unit in enumerate(render_units):
-        # get aliases for this render unit, if none exist just use the base name
-
-        # add callback to base paths for all all aliases
-        for addr in build_osc_paths(skc.OscPathType.Gain, render_unit):
-            bindToDataAndUiPort(
-                addr, partial(oscreceived_setRenderGainToRenderer, rendIdx)
+class OSCComCenter:
+    def __init__(
+        self,
+        soundobjects: list[SoundObject],
+        receivers: list[Renderer],
+        renderengines: list[str],
+        n_sources: int,
+        n_direct_sends: int,
+        ip: str,
+        port_ui: int,
+        port_data: int,
+        port_settings: int,
+    ) -> None:
+        self.soundobjects = soundobjects
+
+        self.clientSubscriptions: dict[str, ViewClient] = {}
+        self.receivers = receivers
+        self.extendedOscInput = True
+        self.verbosity = 0
+        self.bPrintOSC = False
+
+        self.renderengines = renderengines
+        self.n_renderengines = len(renderengines)
+        self.n_sources = n_sources
+        self.n_direct_sends = n_direct_sends
+
+        self.osc_ui_server = OSCThreadServer()
+        self.osc_data_server = OSCThreadServer()
+        self.osc_setting_server = OSCThreadServer()
+
+        self.ip = ip
+        self.port_ui = port_ui
+        self.port_data = port_data
+        self.port_settings = port_settings
+
+    def setVerbosity(self, v: int):
+        self.verbosity = v
+        self.bPrintOSC = v >= 2
+        Renderer.setVerbosity(v)
+        log.debug("verbosity set to", v)
+
+    def setupOscSettingsBindings(self):
+        self.osc_setting_server.listen(
+            address=self.ip, port=self.port_settings, default=True
+        )
+
+        # also allow oscrouter in settings path for backwards compatibility
+        for base_path in ["oscrouter", "osckreuz"]:
+            self.osc_setting_server.bind(
+                f"/{base_path}/debug/osccopy".encode(), self.oscreceived_debugOscCopy
+            )
+            self.osc_setting_server.bind(
+                f"/{base_path}/debug/verbose".encode(), self.oscreceived_verbose
+            )
+            self.osc_setting_server.bind(
+                f"/{base_path}/subscribe".encode(), self.oscreceived_subscriptionRequest
+            )
+            self.osc_setting_server.bind(
+                f"/{base_path}/unsubscribe".encode(), self.osc_handler_unsubscribe
+            )
+            self.osc_setting_server.bind(
+                f"/{base_path}/ping".encode(), self.oscreceived_ping
+            )
+            self.osc_setting_server.bind(
+                f"/{base_path}/pong".encode(), self.oscreceived_pong
+            )
+            self.osc_setting_server.bind(
+                f"/{base_path}/dump".encode(), self.oscreceived_dump
             )
 
-        # add callback to extended paths
-        if extendedOscInput:
-            for i in range(n_sources):
+    def oscreceived_ping(self, *args):
+
+        if self.checkPort(args[0]):
+            self.osc_setting_server.answer(
+                b"/oscrouter/pong", port=args[0], values=["osc-kreuz".encode()]
+            )
+
+    def oscreceived_pong(self, *args):
+
+        try:
+            clientName = args[0]
+            self.clientSubscriptions[clientName].receivedIsAlive()
+        except:
+            if self.verbosity > 0:
+                _name = ""
+                if len(args) > 0:
+                    _name = args[0]
+                log.info("no renderer for pong message {}".format(_name))
+
+    def oscreceived_subscriptionRequest(self, *args) -> None:
+        """OSC Callback for subscription Requests.
+
+        These requests follow the format:
+        /oscrouter/subscribe myname 31441 xyz 0 5
+        /oscrouter/subscribe [client_name] [client_port] [coordinate_format] [source index as value? (0 or 1)] [update rate]
+        args[0] nameFor Client
+        args[1] port client listens to
+        args[2] format client expects
+        args[3] send source index as value instead of inside the osc prefix
+        args[4] source position update rate
+        """
+
+        viewClientInitValues = {}
+        vCName = args[0]
+        subArgs = len(args)
+        if subArgs >= 2:
+            if self.checkPort(args[1]):
+                viewClientInitValues["port"] = args[1]
+
+                _ip = self.osc_setting_server.get_sender()[1]
+
+                viewClientInitValues["hostname"] = _ip
+
+                # if subArgs>2:
+                #     initKeys = ['dataformat', 'indexAsValue', 'updateintervall']
+                #     for i in range(2, subArgs):
+                #         viewClientInitValues[initKeys[i-2]] = args[i]
+                try:
+                    viewClientInitValues["dataformat"] = args[2].decode()
+                except:
+                    pass
+                try:
+                    viewClientInitValues["indexAsValue"] = args[3]
+                except:
+                    pass
+                try:
+                    viewClientInitValues["updateintervall"] = args[4]
+                except:
+                    pass
+            newViewClient = ViewClient(vCName, **viewClientInitValues)
+
+            self.clientSubscriptions[vCName] = newViewClient
+            # TODO check if this is threadsafe (it probably isn't)
+            self.receivers.append(newViewClient)
+            newViewClient.checkAlive(self.deleteClient)
+
+        else:
+            if self.verbosity > 0:
+                log.info("not enough arguments für view client")
+
+    def osc_handler_unsubscribe(self, *args) -> None:
+        """OSC Callback for unsubscribe Requests.
+
+        These requests follow the format:
+        /oscrouter/unsubscribe myname
+        /oscrouter/unsubscribe [client_name]
+        args[0] nameFor Client
+        """
+        log.info("unsubscribe request")
+        subArgs = len(args)
+        if len(args) >= 1:
+            client_name = args[0]
+            try:
+                view_client = self.clientSubscriptions[client_name]
+                self.deleteClient(view_client, client_name)
+
+            except KeyError:
+                log.warning(f"can't delete client {client_name}, it does not exist")
+        else:
+            log.warning("not enough arguments für view client")
+
+    def oscreceived_dump(self, *args):
+        pass
+        # TODO: dump all source data to renderer
+
+    def deleteClient(self, viewC, alias):
+        # TODO check if this is threadsafe (it probably isn't)
+        # TODO handle client with same name connection/reconnecting. maybe add ip as composite key?
+        if self.verbosity > 0:
+            log.info(f"deleting client {viewC}, {alias}")
+        try:
+            self.receivers.remove(viewC)
+            del self.clientSubscriptions[alias]
+            log.info(f"removed client {alias}")
+        except (ValueError, KeyError):
+            log.warning(f"tried to delete receiver {alias}, but it does not exist")
+
+    def checkPort(self, port) -> bool:
+        if type(port) == int and 1023 < port < 65535:
+            return True
+        else:
+            if self.verbosity > 0:
+                log.info(f"port {port} not legit")
+            return False
+
+    def checkIp(self, ip) -> bool:
+        ipalright = True
+        try:
+            _ip = "127.0.0.1" if ip == "localhost" else ip
+            _ = ipaddress.ip_address(_ip)
+        except:
+            ipalright = False
+            if self.verbosity > 0:
+                log.info(f"ip address {ip} not legit")
+
+        return ipalright
+
+    def checkIpAndPort(self, ip, port) -> bool:
+        return self.checkIp(ip) and self.checkPort(port)
+
+    def oscreceived_debugOscCopy(self, *args):
+        ip = ""
+        port = 0
+        if len(args) == 2:
+            ip = args[0].decode()
+            port = args[1]
+        elif len(args) == 1:
+            ipport = args[0].decode().split(":")
+            if len(ipport) == 2:
+                ip = ipport[0]
+                port = ipport[1]
+        else:
+            Renderer.debugCopy = False
+            log.info("debug client: invalid message format")
+            return
+        try:
+            ip = "127.0.0.1" if ip == "localhost" else ip
+            osccopy_ip = ipaddress.ip_address(ip)
+            osccopy_port = int(port)
+        except:
+            log.info("debug client: invalid ip or port")
+            return
+        log.info(f"debug client connected: {ip}:{port}")
+
+        if 1023 < osccopy_port < 65535:
+            Renderer.createDebugClient(str(osccopy_ip), osccopy_port)
+            Renderer.debugCopy = True
+            return
+
+        Renderer.debugCopy = False
+
+    def oscreceived_verbose(self, *args):
+        vvvv = -1
+        try:
+            vvvv = int(args[0])
+        except:
+            self.setVerbosity(0)
+            # verbosity = 0
+            # Renderer.setVerbosity(0)
+            log.error("wrong verbosity argument")
+            return
+
+        if 0 <= vvvv <= 2:
+            self.setVerbosity(vvvv)
+            # global verbosity
+            # verbosity = vvvv
+            # Renderer.setVerbosity(vvvv)
+        else:
+            self.setVerbosity(0)
+
+    def build_osc_paths(
+        self, osc_path_type: skc.OscPathType, value: str, idx: int | None = None
+    ) -> list[str]:
+        """Builds a list of all needed osc paths for a given osc path Type and the value.
+        If idx is supplied, the extended path is used. Aliases for the value are handled
+
+        Args:
+            osc_path_type (skc.OscPathType): Osc Path Type
+            value (str): value to be written into the OSC strings.
+            idx (int | None, optional): Index of the source if the extended format should be used. Defaults to None.
+
+        Raises:
+            KeyError: Raised when the Osc Path Type does not exist
+
+        Returns:
+            list[str]: list of OSC path strings
+        """
+        if osc_path_type not in skc.osc_paths:
+            raise KeyError(f"Invalid OSC Path Type: {osc_path_type}")
+        try:
+            aliases = skc.osc_aliases[value]
+        except KeyError:
+            aliases = [value]
+
+        if idx is None:
+            paths = skc.osc_paths[osc_path_type]["base"]
+        else:
+            paths = skc.osc_paths[osc_path_type]["extended"]
+
+        return [path.format(val=alias, idx=idx) for alias in aliases for path in paths]
+
+    def setupOscBindings(
+        self,
+    ):
+        """Sets up all Osc Bindings"""
+        self.setupOscSettingsBindings()
+
+        self.osc_ui_server.listen(address=self.ip, port=self.port_ui, default=True)
+        self.osc_data_server.listen(address=self.ip, port=self.port_data, default=True)
+
+        log.info(
+            f"listening on port {self.port_ui} for data, {self.port_settings} for settings"
+        )
+
+        # Setup OSC Callbacks for positional data
+        for coordinate_format in get_all_coordinate_formats():
+
+            for addr in self.build_osc_paths(
+                skc.OscPathType.Position, coordinate_format
+            ):
+                self.bindToDataAndUiPort(
+                    addr,
+                    partial(self.osc_handler_position, coord_fmt=coordinate_format),
+                )
+
+            if self.extendedOscInput:
+                for i in range(self.n_sources):
+                    idx = i + 1
+                    for addr in self.build_osc_paths(
+                        skc.OscPathType.Position, coordinate_format, idx=idx
+                    ):
+                        self.bindToDataAndUiPort(
+                            addr,
+                            partial(
+                                self.osc_handler_position,
+                                coord_fmt=coordinate_format,
+                                source_index=i,
+                            ),
+                        )
+
+        # Setup OSC for Wonder Attribute Paths
+        # TODO add path without attribute name
+        for attribute in skc.SourceAttributes:
+            for addr in self.build_osc_paths(
+                skc.OscPathType.Properties, attribute.value
+            ):
+                log.info(f"WFS Attr path: {addr}")
+                self.bindToDataAndUiPort(
+                    addr,
+                    # partial(self.oscReceived_setValueForAttribute, attribute),
+                    partial(self.osc_handler_attribute, attribute=attribute),
+                )
+
+            for i in range(self.n_sources):
                 idx = i + 1
-                for addr in build_osc_paths(skc.OscPathType.Gain, render_unit, idx):
-                    bindToDataAndUiPort(
+                for addr in self.build_osc_paths(
+                    skc.OscPathType.Properties, attribute.value, idx
+                ):
+                    self.bindToDataAndUiPort(
                         addr,
                         partial(
-                            oscreceived_setRenderGainForSourceForRenderer, i, rendIdx
+                            # self.oscreceived_setValueForSourceForAttribute,
+                            self.osc_handler_attribute,
+                            source_index=i,
+                            attribute=attribute,
                         ),
                     )
 
-    directSendAddr = "/source/send/direct"
-    bindToDataAndUiPort(directSendAddr, partial(oscreceived_setDirectSend))
+        # sendgain input
+        for spatGAdd in ["/source/send/spatial", "/send/gain", "/source/send"]:
+            self.bindToDataAndUiPort(spatGAdd, partial(self.osc_handler_gain))
 
-    # XXX can this be removed?
-    # if extendedOscInput:
-    #     for i in range(n_sources):
-    #         idx = i + 1
-    #         for addr in [
-    #             ("/source/" + str(idx) + "/rendergain"),
-    #             ("/source/" + str(idx) + "/send/spatial"),
-    #             ("/source/" + str(idx) + "/spatial"),
-    #             ("/source/" + str(idx) + "/sendspatial"),
-    #         ]:
+        # Setup OSC Callbacks for all render units
+        for rendIdx, render_unit in enumerate(self.renderengines):
+            # get aliases for this render unit, if none exist just use the base name
 
-    #             bindToDataAndUiPort(
-    #                 addr, partial(oscreceived_setRenderGainForSource, i)
-    #             )
+            # add callback to base paths for all all aliases
+            for addr in self.build_osc_paths(skc.OscPathType.Gain, render_unit):
+                self.bindToDataAndUiPort(
+                    addr,
+                    partial(self.osc_handler_gain, render_index=rendIdx),
+                )
 
-    #             # TODO fix whatever this is
-    #             # This adds additional osc paths for the render engines by index
-    #             # for j in range(len(renderengineClients)):
-    #             #     addr2 = addr + "/" + str(j)
-    #             #     bindToDataAndUiPort(
-    #             #         addr2,
-    #             #         partial(oscreceived_setRenderGainForSourceForRenderer, i, j),
-    #             #     )
+            # add callback to extended paths
+            if self.extendedOscInput:
+                for i in range(self.n_sources):
+                    idx = i + 1
+                    for addr in self.build_osc_paths(
+                        skc.OscPathType.Gain, render_unit, idx
+                    ):
+                        self.bindToDataAndUiPort(
+                            addr,
+                            # partial(
+                            #     self.oscreceived_setRenderGainForSourceForRenderer,
+                            #     i,
+                            #     rendIdx,
+                            # ),
+                            partial(
+                                self.osc_handler_gain,
+                                source_index=i,
+                                render_index=rendIdx,
+                            ),
+                        )
 
-    #         for addr in [
-    #             ("/source/" + str(idx) + "/direct"),
-    #             ("/source/" + str(idx) + "/directsend"),
-    #             ("/source/" + str(idx) + "/senddirect"),
-    #             ("/source/" + str(idx) + "/send/direct"),
-    #         ]:
-    #             bindToDataAndUiPort(
-    #                 addr, partial(oscreceived_setDirectSendForSource, idx)
-    #             )
-
-    #             for j in range(globalconfig["number_direct_sends"]):
-    #                 addr2 = addr + "/" + str(j)
-    #                 bindToDataAndUiPort(
-    #                     addr2,
-    #                     partial(oscreceived_setDirectSendForSourceForChannel, idx, j),
-    #                 )
-
-    if verbosity > 2:
-        for add in osc_ui_server.addresses:
-            log.info(add)
-
-
-def bindToDataAndUiPort(addr: str, func):
-    # dontUseDataPortFlag = bool(globalconfig['data_port_timeout'] == 0)
-    log.debug(f"Adding OSC callback for {addr}")
-    addrEnc = addr.encode()
-
-    # if verbosity >= 2:
-    osc_ui_server.bind(
-        addrEnc, partial(printOSC, addr=addr, port=globalconfig[skc.inputport_ui])
-    )
-    osc_data_server.bind(
-        addrEnc, partial(printOSC, addr=addr, port=globalconfig[skc.inputport_data])
-    )
-
-    osc_ui_server.bind(addrEnc, partial(func, fromUi=True))
-    osc_data_server.bind(addrEnc, partial(func, fromUi=False))
-
-
-def sourceLegit(id: int) -> bool:
-    indexInRange = 0 <= id < globalconfig["number_sources"]
-    if verbosity > 0:
-        if not indexInRange:
-            if not type(id) == int:
-                log.warn("source index is no integer")
-            else:
-                log.warn("source index out of range")
-    return indexInRange
-
-
-def renderIndexLegit(id: int) -> bool:
-    indexInRange = 0 <= id < globalconfig["n_renderengines"]
-    if verbosity > 0:
-        if not indexInRange:
-            if not type(id) == int:
-                log.warn("renderengine index is no integer")
-            else:
-                log.warn("renderengine index out of range")
-    return indexInRange
-
-
-def directSendLegit(id: int) -> bool:
-    indexInRange = 0 <= id < globalconfig["number_direct_sends"]
-    if verbosity > 0:
-        if not indexInRange:
-            if not type(id) == int:
-                log.warn("direct send index is no integer")
-            else:
-                log.warn("direct send index out of range")
-    return indexInRange
-
-
-def oscreceived_setPosition(coordKey, *args, fromUi=True):
-    try:
-        sIdx = int(args[0]) - 1
-    except ValueError:
-        return False
-
-    if sourceLegit(sIdx):
-        oscreceived_setPositionForSource(coordKey, sIdx, *args[1:], fromUi=fromUi)
-
-
-def oscreceived_setPositionForSource(coordKey, sIdx: int, *args, fromUi=True):
-
-    if soundobjects[sIdx].setPosition(coordKey, *args, fromUi=fromUi):
-        notifyRenderClientsForUpdate("sourcePositionChanged", sIdx, fromUi=fromUi)
-        # notifyRendererForSourcePosition(sIdx, fromUi)
-
-
-# TODO why are there this many functions for doing almost the same thing?
-def oscreceived_setRenderGain(*args, fromUi: bool = True):
-    try:
-        sIdx = int(args[0]) - 1
-    except ValueError:
-        return False
-
-    if sourceLegit(sIdx):
-        sIdx = int(sIdx)
-        oscreceived_setRenderGainForSource(sIdx, *args[1:], fromUi)
-
-
-def oscreceived_setRenderGainToRenderer(rIdx: int, *args, fromUi: bool = True):
-    try:
-        sIdx = int(args[0]) - 1
-    except ValueError:
-        return False
-    if renderIndexLegit(rIdx) and sourceLegit(sIdx):
-        rIdx = int(rIdx)
-        sIdx = int(sIdx)
-        oscreceived_setRenderGainForSourceForRenderer(
-            sIdx, rIdx, *args[1:], fromUi=fromUi
+        directSendAddr = "/source/send/direct"
+        self.bindToDataAndUiPort(
+            directSendAddr, partial(self.osc_handler_direct_send_gain)
         )
 
+        # XXX can this be removed?
+        # if extendedOscInput:
+        #     for i in range(n_sources):
+        #         idx = i + 1
+        #         for addr in [
+        #             ("/source/" + str(idx) + "/rendergain"),
+        #             ("/source/" + str(idx) + "/send/spatial"),
+        #             ("/source/" + str(idx) + "/spatial"),
+        #             ("/source/" + str(idx) + "/sendspatial"),
+        #         ]:
 
-def oscreceived_setRenderGainForSource(sIdx: int, *args, fromUi: bool = True):
-    rIdx = args[0]
-    if renderIndexLegit(rIdx):
-        rIdx = int(rIdx)
-        oscreceived_setRenderGainForSourceForRenderer(
-            sIdx, rIdx, *args[1:], fromUi=fromUi
+        #             bindToDataAndUiPort(
+        #                 addr, partial(oscreceived_setRenderGainForSource, i)
+        #             )
+
+        #             # TODO fix whatever this is
+        #             # This adds additional osc paths for the render engines by index
+        #             # for j in range(len(renderengineClients)):
+        #             #     addr2 = addr + "/" + str(j)
+        #             #     bindToDataAndUiPort(
+        #             #         addr2,
+        #             #         partial(oscreceived_setRenderGainForSourceForRenderer, i, j),
+        #             #     )
+
+        #         for addr in [
+        #             ("/source/" + str(idx) + "/direct"),
+        #             ("/source/" + str(idx) + "/directsend"),
+        #             ("/source/" + str(idx) + "/senddirect"),
+        #             ("/source/" + str(idx) + "/send/direct"),
+        #         ]:
+        #             bindToDataAndUiPort(
+        #                 addr, partial(oscreceived_setDirectSendForSource, idx)
+        #             )
+
+        #             for j in range(globalconfig["number_direct_sends"]):
+        #                 addr2 = addr + "/" + str(j)
+        #                 bindToDataAndUiPort(
+        #                     addr2,
+        #                     partial(oscreceived_setDirectSendForSourceForChannel, idx, j),
+        #                 )
+
+        if self.verbosity > 2:
+            for add in self.osc_ui_server.addresses:
+                log.info(add)
+
+    def bindToDataAndUiPort(self, addr: str, func: Callable):
+        log.debug(f"Adding OSC callback for {addr}")
+        addrEnc = addr.encode()
+
+        # if verbosity >= 2:
+        self.osc_ui_server.bind(
+            addrEnc, partial(self.printOSC, addr=addr, port=self.port_ui)
+        )
+        self.osc_data_server.bind(
+            addrEnc, partial(self.printOSC, addr=addr, port=self.port_data)
         )
 
+        self.osc_ui_server.bind(addrEnc, partial(func, fromUi=True))
+        self.osc_data_server.bind(addrEnc, partial(func, fromUi=False))
 
-def oscreceived_setRenderGainForSourceForRenderer(
-    sIdx: int, rIdx: int, *args, fromUi: bool = True
-):
+    def sourceLegit(self, id: int) -> bool:
+        indexInRange = 0 <= id < self.n_sources
+        if self.verbosity > 0:
+            if not indexInRange:
+                if not type(id) == int:
+                    log.warning("source index is no integer")
+                else:
+                    log.warning("source index out of range")
+        return indexInRange
 
-    if soundobjects[sIdx].setRendererGain(rIdx, args[0], fromUi):
-        notifyRenderClientsForUpdate(
-            "sourceRenderGainChanged", sIdx, rIdx, fromUi=fromUi
-        )
+    def renderIndexLegit(self, id: int) -> bool:
+        indexInRange = 0 <= id < self.n_renderengines
+        if self.verbosity > 0:
+            if not indexInRange:
+                if not type(id) == int:
+                    log.warning("renderengine index is no integer")
+                else:
+                    log.warning("renderengine index out of range")
+        return indexInRange
 
+    def directSendLegit(self, id: int) -> bool:
+        indexInRange = 0 <= id < self.n_direct_sends
+        if self.verbosity > 0:
+            if not indexInRange:
+                if not type(id) == int:
+                    log.warning("direct send index is no integer")
+                else:
+                    log.warning("direct send index out of range")
+        return indexInRange
 
-def oscreceived_setDirectSend(*args, fromUi: bool = True):
-    try:
-        sIdx = int(args[0]) - 1
-    except ValueError:
-        return False
-    if sourceLegit(sIdx):
-        sIdx = int(sIdx)
-        oscreceived_setDirectSendForSource(sIdx, *args[1:], fromUi)
+    def osc_handler_position(
+        self, *args, coord_fmt: str = "xyz", source_index=-1, fromUi=True
+    ):
+        args_index = 0
 
+        if source_index == -1:
+            try:
+                source_index = int(args[args_index]) - 1
+                args_index += 1
+            except ValueError:
+                return False
 
-def oscreceived_setDirectSendForSource(sIdx: int, *args, fromUi: bool = True):
-    cIdx = args[0]
-    if directSendLegit(cIdx):  # 0 <= cIdx < globalconfig['number_direct_sends']:
-        cIdx = int(cIdx)
-        oscreceived_setDirectSendForSourceForChannel(sIdx, cIdx, *args[1:], fromUi)
+        if not self.sourceLegit(source_index):
+            return False
 
+        if self.soundobjects[source_index].setPosition(
+            coord_fmt, *args[args_index:], fromUi=fromUi
+        ):
+            self.notifyRenderClientsForUpdate(
+                "sourcePositionChanged", source_index, fromUi=fromUi
+            )
 
-def oscreceived_setDirectSendForSourceForChannel(
-    sIdx: int, cIdx: int, *args, fromUi: bool = True
-):
-    if soundobjects[sIdx].setDirectSend(cIdx, args[0], fromUi):
-        notifyRenderClientsForUpdate(
-            "sourceDirectSendChanged", sIdx, cIdx, fromUi=fromUi
-        )
+    def osc_handler_gain(
+        self, *args, source_index=-1, render_index=-1, fromUi: bool = True
+    ) -> bool:
 
+        args_index = 0
 
-# TODO: implement this thing
-def notifyRendererForDirectsendGain(sIdx: int, cIfx: int, fromUi: bool = True):
-    pass
+        if source_index == -1:
+            try:
+                source_index = int(args[args_index]) - 1
+                args_index += 1
+            except ValueError:
+                return False
 
+        if render_index == -1:
+            try:
+                render_index = int(args[args_index])
+                args_index += 1
+            except ValueError:
+                return False
 
-def oscreceived_setAttribute(*args, fromUi: bool = True):
-    try:
-        sIdx = int(args[0]) - 1
-    except ValueError:
-        return False
-    if sourceLegit(sIdx):
-        sIdx = int(sIdx)
-        oscreceived_setAttributeForSource(sIdx, *args[1:], fromUi)
+        try:
+            gain = float(args[args_index])
+        except ValueError:
+            return False
 
+        if not (self.sourceLegit(source_index) and self.renderIndexLegit(render_index)):
+            return False
 
-def oscreceived_setAttributeForSource(sIdx: int, *args, fromUi: bool = True):
-    attribute = args[0]
-    if attribute in skc.knownAttributes:
-        oscreceived_setValueForSourceForAttribute(sIdx, attribute, *args[1:], fromUi)
+        if self.soundobjects[source_index].setRendererGain(render_index, gain, fromUi):
+            self.notifyRenderClientsForUpdate(
+                "sourceRenderGainChanged", source_index, render_index, fromUi=fromUi
+            )
+        return True
 
+    def osc_handler_direct_send_gain(
+        self, *args, source_index=-1, direct_send_index=-1, fromUi: bool = True
+    ):
+        args_index = 0
+        if source_index == -1:
+            try:
+                source_index = int(args[args_index]) - 1
+                args_index += 1
+            except ValueError:
+                return False
 
-def oscReceived_setValueForAttribute(
-    attribute: skc.SourceAttributes, *args, fromUi: bool = True
-):
-    try:
-        sIdx = int(args[0]) - 1
-    except ValueError:
-        return False
-    if sourceLegit(sIdx):
-        sIdx = int(sIdx)
-        oscreceived_setValueForSourceForAttribute(sIdx, attribute, *args[1:], fromUi)
+        if direct_send_index == -1:
+            try:
+                direct_send_index = int(args[args_index])
+                args_index += 1
+            except ValueError:
+                return False
 
+        try:
+            gain = float(args[args_index])
+        except ValueError:
+            return False
 
-def oscreceived_setValueForSourceForAttribute(
-    sIdx: int, attribute: skc.SourceAttributes, *args, fromUi: bool = True
-):
-    if soundobjects[sIdx].setAttribute(attribute, args[0], fromUi):
-        notifyRenderClientsForUpdate(
-            "sourceAttributeChanged", sIdx, attribute, fromUi=fromUi
-        )
+        if not (
+            self.sourceLegit(source_index) and self.directSendLegit(direct_send_index)
+        ):
+            return False
 
+        if self.soundobjects[source_index].setDirectSend(
+            direct_send_index, gain, fromUi
+        ):
+            self.notifyRenderClientsForUpdate(
+                "sourceDirectSendChanged",
+                source_index,
+                direct_send_index,
+                fromUi=fromUi,
+            )
+        return True
 
-def notifyRenderClientsForUpdate(updateFunction: str, *args, fromUi: bool = True):
-    for receiver in receivers:
-        updatFunc = getattr(receiver, updateFunction)
-        updatFunc(*args)
+    def osc_handler_attribute(
+        self,
+        *args,
+        source_index=-1,
+        attribute: skc.SourceAttributes | None = None,
+        fromUi: bool = True,
+    ):
+        args_index = 0
+        if source_index == -1:
+            try:
+                source_index = int(args[args_index]) - 1
+                args_index += 1
+            except ValueError:
+                return False
 
-    # XXX why was this distinction made? dataClients were not included in receivers
-    # if fromUi:
-    #     for rend in dataClients:
-    #         updatFunc = getattr(rend, updateFunction)
-    #         updatFunc(*args)
+        if attribute == None:
+            try:
+                attribute = skc.SourceAttributes(args[args_index])
+                args_index += 1
+            except ValueError:
+                return False
 
+        try:
+            value = float(args[args_index])
+        except ValueError:
+            return False
 
-######
-def oscreceived_sourceAttribute(attribute: skc.SourceAttributes, *args):
+        if self.soundobjects[source_index].setAttribute(attribute, value, fromUi):
+            self.notifyRenderClientsForUpdate(
+                "sourceAttributeChanged", source_index, attribute, fromUi=fromUi
+            )
 
-    try:
-        sidx = int(args[0]) - 1
-    except ValueError:
-        return False
-    if sidx >= 0 and sidx < 64:
-        oscreceived_sourceAttribute_wString(sidx, attribute, args[1:])
+    def notifyRenderClientsForUpdate(
+        self, updateFunction: str, *args, fromUi: bool = True
+    ):
+        for receiver in self.receivers:
+            updatFunc = getattr(receiver, updateFunction)
+            updatFunc(*args)
 
-
-def oscreceived_sourceAttribute_wString(
-    sidx: int, attribute: skc.SourceAttributes, *args
-):
-    sobject = soundobjects[sidx]
-    if sobject.setAttribute(attribute, args[0]):
-        for ren in receivers:
-            ren.sourceAttributeChanged(sidx, attribute)
-
-
-def printOSC(*args, addr: str = "", port: int = 0):
-    if bPrintOSC:
-        log.info("incoming OSC on Port", port, addr, args)
+    def printOSC(self, *args, addr: str = "", port: int = 0):
+        if self.bPrintOSC:
+            log.info("incoming OSC on Port", port, addr, args)

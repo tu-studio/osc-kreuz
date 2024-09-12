@@ -15,6 +15,9 @@ dynamic = ["version"]
 dependencies = ["numpy", "oscpy", "click", "pyYAML"]
 license = { file = "LICENSE" }
 
+[project.optional-dependencies]
+tests = ['pytest', 'pyfar']
+
 [project.scripts]
 osc-kreuz = "osc_kreuz.osc_kreuz:main"
 

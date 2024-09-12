@@ -1,6 +1,6 @@
-from osc_kreuz.soundobject import SoundObject
-import osc_kreuz.str_keys_conventions as skc
 import numpy as np
+
+from osc_kreuz.soundobject import SoundObject
 
 
 def test_scaling():
@@ -9,7 +9,6 @@ def test_scaling():
         "data_port_timeout": 0,
         "render_units": ["ambi", "wfs", "reverb"],
         "send_changes_only": False,
-        "min_dist": 0,
     }
 
     SoundObject.readGlobalConfig(global_conf)
@@ -35,7 +34,6 @@ def test_distance():
         "data_port_timeout": 0,
         "render_units": ["ambi", "wfs", "reverb"],
         "send_changes_only": False,
-        "min_dist": 0,
     }
 
     SoundObject.readGlobalConfig(global_conf)
