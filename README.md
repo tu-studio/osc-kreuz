@@ -1,3 +1,5 @@
+[![Python Tests](https://github.com/tu-studio/osc-kreuz/actions/workflows/python-test.yml/badge.svg)](https://github.com/tu-studio/osc-kreuz/actions/workflows/python-test.yml)
+
 # OSC-kreuz
 
 The osc-kreuz serves as a central interface for OSC messages in a multiclient spatial rendering environment. It automatically translates incoming OSC messages to match the expected formats of the rendering engines and distributes it to all connected clients including UI Clients and Data clients for automation data.
@@ -50,7 +52,9 @@ These Properties for the WFS system can be set using the following paths, where 
 ## Gains
 
 Gains can be set individually for each rendering system, `[rendering_system]` can be either the name of the rendering system, or for some special rendering systems also an alias (`ambi` or `ambisonics` for the rendering system `ambi`,
-`wfs` or `wavefieldsynthesis` for the rendering system `wfs`). There exists also a special path, where gains for the different rendering systems can be set by the index of the rendering system, starting from 0, in the order the rendering systems are declared in the config, these are the first three in the table.
+`wfs` or `wavefieldsynthesis` for the rendering system `wfs`).
+
+There exists also a special path, where gains for the different rendering systems can be set by the index of the rendering system, starting from 0, in the order the rendering systems are declared in the config, these are the first three in the table.
 
 | OSC-Path                                              | Argument Types |
 | ----------------------------------------------------- | -------------- |
