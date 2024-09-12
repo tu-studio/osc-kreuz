@@ -82,11 +82,12 @@ The connection is initialised by a subscricption request from the client which i
 
 ### Subscribe
 
-A client can subscribe to all position and gain messages e.g. a viewer-client during production process. Subcriptions and pong messages should be send to port 4999.
+A client can subscribe to all position and gain messages e.g. a viewer-client during production process. Subcriptions and pong messages should be sent to port 4999.
+
 The connection is initialised via:
-`/oscrouer/subscribe s i s (i i)` with s = uniqueClientName, i=listeningPort, s=coordinateFormat, i=sourceIndexInOsc(0/1), i=minUpdateIntervall
-The last three arguments are optional and are set to '1 10' by default.
-e.g. `/oscrouter/subscribe maxViewer 55123 xyz 1 10`
+`/osckreuz/subscribe s i [s i i]` where the parameters are client_name (string), client_port (int), coordinate_format (string), source_index_in_osc_path (int, allowed values are 0 and 1), min_update_intervall (int, in ms)
+The last three arguments are optional and are set to '"xyz" 0 10' by default.
+e.g. `/osckreuz/subscribe my_cool_viewer 55123 xyz 1 10`
 will send source-position messages to the subscribing client as follows:
 
 - For Position
@@ -94,14 +95,23 @@ will send source-position messages to the subscribing client as follows:
 - For gains e.g.
   `/source/1/ambi f`
 
+for now, direct sends and attributes always send the source index as a parameter.
+
+If `sourceIndexInOscPath` is set to zero, the following paths are used:
+
+- Positional Data: `/source/[coordinateFormat] i[f...]`
+- Renderer Gains: `/source/send iif (source_index renderer_index gain)`
+- Direct Send Gains: `/source/direct iif (source_index send_index gain)`
+- Attribute: `/source/attribute isf (source_index attribute_name value)`
+
 The ip-Address of the client is retrieved automatically from the udp-packet by the OSC-Router.
 
 ### ping-pong
 
 The osc-router regularly sends the message
-`/oscrouter/ping 4999` to all subscribed clients
+`/osckreuz/ping 4999` to all subscribed clients
 which should be answered (to port 4999) with
-`/oscrouter/pong uniqueClientName`
+`/osckreuz/pong uniqueClientName`
 The uniqueClientName has to be the same as in the subcription message.
 If the client does not answer to the ping message it will be erased after a certain time.
 
@@ -110,11 +120,11 @@ If the client does not answer to the ping message it will be erased after a cert
 Port: 4999
 
 A copy of all outgoing osc-messages from the osc-kreuz can requested by sending:
-`/oscrouter/debug/osccopy ipAddress:port` with ipAddress and listening port of the receiving machine e.g. `/oscrouter/debug/osccopy 192.168.3.2:55112`
+`/osckreuz/debug/osccopy ipAddress:port` with ipAddress and listening port of the receiving machine e.g. `/osckreuz/debug/osccopy 192.168.3.2:55112`
 The debug-osc messages contain the name of the target as well as ip-address and port.
-To deactivate this send a message without target address: `/oscrouter/debug/osccopy`
+To deactivate this send a message without target address: `/osckreuz/debug/osccopy`
 
-With the message `/oscrouter/debug/verbose i` a verbosity level can be set which activates console printing of incoming and outcoming messages as well as further informations.
+With the message `/osckreuz/debug/verbose i` a verbosity level can be set which activates console printing of incoming and outcoming messages as well as further information.
 Set verbosity to 0 when to stop console output which can significantly slow down the system.
 
 # Configuration
