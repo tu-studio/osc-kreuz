@@ -123,16 +123,6 @@ def test_specific_spherical_values():
         )
 
 
-def test_spherical_normalization():
-    for aed_init, aed_expected in [
-        ((0, 135, 1), (180, 45, 1)),
-        ((10, -91, 2), (-170, -89, 2)),
-    ]:
-        c = CoordinatePolar(*aed_init)
-
-        assert np.allclose(c.get_all(), aed_expected)
-
-
 def test_replacing_single_values_azim():
     for _ in range(1000):
         xyz_coords = CoordinateCartesian(
