@@ -195,7 +195,6 @@ def test_audiorouter_renderer():
     conf = {"type": "audiorouter", "hosts": [], "updateintervall": 5}
     c = prepare_renderer(conf)
     s = c.updateStack[0]
-    so = c.sources[0]
     assert len(s) == 0
     assert isinstance(c, r.Audiorouter)
 
@@ -219,7 +218,6 @@ def test_audiorouterWFS_renderer():
     conf = {"type": "audiorouterWFS", "hosts": [], "updateintervall": 5}
     c = prepare_renderer(conf)
     s = c.updateStack[0]
-    so = c.sources[0]
     assert len(s) == 0
     assert isinstance(c, r.AudiorouterWFS)
 

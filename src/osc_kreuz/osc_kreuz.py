@@ -7,7 +7,6 @@ import sys
 from threading import Event
 
 import click
-import yaml
 
 from osc_kreuz.config import read_config, read_config_option
 import osc_kreuz.osccomcenter as osccomcenter
@@ -167,7 +166,7 @@ def main(config_path, oscdebug, verbose, ip, port_ui, port_data, port_settings):
     log.info("setting up receivers")
     if "receivers" in config:
         for receiver_config in config["receivers"]:
-            if not "type" in receiver_config:
+            if "type" not in receiver_config:
                 log.warning("receiver has no type specified, skipping")
                 continue
             try:

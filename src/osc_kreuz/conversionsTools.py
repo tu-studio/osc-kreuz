@@ -1,5 +1,3 @@
-from typing import Any
-
 import numpy as np
 
 
@@ -11,7 +9,7 @@ def mag_xyz(x, y, z) -> float:
 
 
 def aed2xyz(a, e, d, coordinates_in_degree: bool = True) -> list[float]:
-    if coordinates_in_degree == True:
+    if coordinates_in_degree:
         e = np.deg2rad(e)
         a = np.deg2rad(a)
 
@@ -28,7 +26,7 @@ def xyz2aed(x, y, z, coordinates_in_degree: bool = True) -> list[float]:
     azim = np.arctan2(y, x)
     elev = np.arctan2(z, np.sqrt(np.square(x) + np.square(y)))
 
-    if coordinates_in_degree == True:
+    if coordinates_in_degree:
         azim = np.rad2deg(azim)
         elev = np.rad2deg(elev)
 

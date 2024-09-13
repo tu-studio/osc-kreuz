@@ -9,9 +9,9 @@ def test_simple_conversions():
         ((90, 0, 1), (0, 1, 0)),
         ((0, 90, 2), (0, 0, 2)),
     ]:
-        xyz_calc = ct.conv_pol2cart(*aed)
+        xyz_calc = ct.aed2xyz(*aed)
         assert np.allclose(xyz, xyz_calc)
-        aed_calc = ct.conv_cart2pol(*xyz_calc)
+        aed_calc = ct.xyz2aed(*xyz_calc, coordinates_in_degree=True)
         assert np.allclose(aed, aed_calc)
 
 
@@ -22,7 +22,7 @@ def test_conversions_xyz_wraparound():
         ((0, 0, 1), (0, 90, 1)),
         ((0, 0, -1), (0, -90, 1)),
     ]:
-        aed_calc = ct.conv_cart2pol(*xyz)
+        aed_calc = ct.xyz2aed(*xyz, coordinates_in_degree=True)
         assert np.allclose(aed, aed_calc)
 
 
@@ -35,7 +35,7 @@ def test_conversions_aed_wraparound():
         ((-360, 0, 1), (1, 0, 0)),
         ((-450, 0, 1), (0, -1, 0)),
     ]:
-        xyz_calc = ct.conv_pol2cart(*aed)
+        xyz_calc = ct.aed2xyz(*aed)
         assert np.allclose(xyz, xyz_calc)
 
 

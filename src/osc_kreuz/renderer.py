@@ -305,7 +305,7 @@ class Renderer(object):
                     receiversClient.send_message(msg.path, msg.values)
 
                 except Exception as e:
-                    log.warn(
+                    log.warning(
                         f"Exception while sending to {receiversClient.address}:{receiversClient.port}: {e}"
                     )
 
@@ -315,7 +315,7 @@ class Renderer(object):
                     ).encode()
                     try:
                         self.oscDebugClient.send_message(debugOsc, msg.values)
-                    except:
+                    except Exception:
                         pass
 
             if self.printOutput:
@@ -367,9 +367,9 @@ class SpatialRenderer(Renderer):
 
 class Wonder(SpatialRenderer):
     def __init__(self, **kwargs):
-        if not "dataformat" in kwargs.keys():
+        if "dataformat" not in kwargs.keys():
             kwargs["dataformat"] = "xy"
-        if not "sourceattributes" in kwargs.keys():
+        if "sourceattributes" not in kwargs.keys():
             kwargs["sourceattributes"] = (
                 skc.SourceAttributes.doppler,
                 skc.SourceAttributes.planewave,
@@ -566,7 +566,7 @@ class AudioMatrix(Renderer):
             elif path_type in ["position", "pos"]:
                 try:
                     coord_fmt = path["format"]
-                except:
+                except KeyError:
                     coord_fmt = "xyz"
                 self.pos_paths.append((osc_path.encode(), coord_fmt))
 
@@ -630,7 +630,7 @@ class AudioMatrix(Renderer):
 
 class SuperColliderEngine(SpatialRenderer):
     def __init__(self, **kwargs):
-        if not "dataformat" in kwargs.keys():
+        if "dataformat" not in kwargs.keys():
             kwargs["dataformat"] = "aed"
         super(SuperColliderEngine, self).__init__(**kwargs)
 
@@ -904,7 +904,7 @@ class SeamlessPlugin(SpatialRenderer):
         return "Seamless Plugin"
 
     def __init__(self, **kwargs):
-        if not "dataformat" in kwargs.keys():
+        if "dataformat" not in kwargs.keys():
             kwargs["dataformat"] = "xyz"
         super(SeamlessPlugin, self).__init__(**kwargs)
 

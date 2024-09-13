@@ -1,9 +1,7 @@
-from functools import partial
 from time import time
 
 import numpy as np
 
-import osc_kreuz.conversionsTools as ct
 from osc_kreuz.coordinates import (
     Coordinate,
     CoordinateCartesian,

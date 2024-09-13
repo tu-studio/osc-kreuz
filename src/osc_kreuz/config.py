@@ -51,7 +51,7 @@ def read_config(config_path) -> dict:
                 break
 
     if config_path is None:
-        log.warning(f"Could not find config, loading default config")
+        log.warning("Could not find config, loading default config")
         # load the default config embedded into this package using files
         config_path = files("osc_kreuz").joinpath("config_default.yml")
         config = yaml.load(config_path.read_bytes(), Loader=yaml.Loader)

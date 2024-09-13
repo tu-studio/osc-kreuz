@@ -95,7 +95,7 @@ class OSCComCenter:
         try:
             clientName = args[0]
             self.clientSubscriptions[clientName].receivedIsAlive()
-        except:
+        except Exception:
             if self.verbosity > 0:
                 _name = ""
                 if len(args) > 0:
@@ -132,15 +132,15 @@ class OSCComCenter:
                 #         viewClientInitValues[initKeys[i-2]] = args[i]
                 try:
                     viewClientInitValues["dataformat"] = args[2].decode()
-                except:
+                except KeyError:
                     pass
                 try:
                     viewClientInitValues["indexAsValue"] = args[3]
-                except:
+                except KeyError:
                     pass
                 try:
                     viewClientInitValues["updateintervall"] = args[4]
-                except:
+                except KeyError:
                     pass
             newViewClient = ViewClient(vCName, **viewClientInitValues)
 
@@ -162,7 +162,6 @@ class OSCComCenter:
         args[0] nameFor Client
         """
         log.info("unsubscribe request")
-        subArgs = len(args)
         if len(args) >= 1:
             client_name = args[0]
             try:
@@ -191,7 +190,7 @@ class OSCComCenter:
             log.warning(f"tried to delete receiver {alias}, but it does not exist")
 
     def checkPort(self, port) -> bool:
-        if type(port) == int and 1023 < port < 65535:
+        if type(port) is int and 1023 < port < 65535:
             return True
         else:
             if self.verbosity > 0:
@@ -203,7 +202,7 @@ class OSCComCenter:
         try:
             _ip = "127.0.0.1" if ip == "localhost" else ip
             _ = ipaddress.ip_address(_ip)
-        except:
+        except Exception:
             ipalright = False
             if self.verbosity > 0:
                 log.info(f"ip address {ip} not legit")
@@ -232,7 +231,7 @@ class OSCComCenter:
             ip = "127.0.0.1" if ip == "localhost" else ip
             osccopy_ip = ipaddress.ip_address(ip)
             osccopy_port = int(port)
-        except:
+        except Exception:
             log.info("debug client: invalid ip or port")
             return
         log.info(f"debug client connected: {ip}:{port}")
@@ -248,7 +247,7 @@ class OSCComCenter:
         vvvv = -1
         try:
             vvvv = int(args[0])
-        except:
+        except Exception:
             self.setVerbosity(0)
             # verbosity = 0
             # Renderer.setVerbosity(0)
@@ -466,7 +465,7 @@ class OSCComCenter:
         indexInRange = 0 <= id < self.n_sources
         if self.verbosity > 0:
             if not indexInRange:
-                if not type(id) == int:
+                if type(id) is not int:
                     log.warning("source index is no integer")
                 else:
                     log.warning("source index out of range")
@@ -476,7 +475,7 @@ class OSCComCenter:
         indexInRange = 0 <= id < self.n_renderengines
         if self.verbosity > 0:
             if not indexInRange:
-                if not type(id) == int:
+                if type(id) is not int:
                     log.warning("renderengine index is no integer")
                 else:
                     log.warning("renderengine index out of range")
@@ -486,7 +485,7 @@ class OSCComCenter:
         indexInRange = 0 <= id < self.n_direct_sends
         if self.verbosity > 0:
             if not indexInRange:
-                if not type(id) == int:
+                if type(id) is not int:
                     log.warning("direct send index is no integer")
                 else:
                     log.warning("direct send index out of range")
@@ -602,7 +601,7 @@ class OSCComCenter:
             except ValueError:
                 return False
 
-        if attribute == None:
+        if attribute is None:
             try:
                 attribute = skc.SourceAttributes(args[args_index])
                 args_index += 1

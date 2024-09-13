@@ -141,7 +141,7 @@ def test_gains():
         sender.send_message(path.encode(), args)
         val = something_changed.wait(5)
 
-        assert val == True
+        assert val
         # standard epsilon is to fine grained
         assert math.isclose(
             listener.sources[source_index].gain[renderer],
@@ -303,7 +303,7 @@ def test_full_positions():
         sender.send_message(path.encode(), args)
         val = something_changed.wait(5)
 
-        assert val == True
+        assert val
         # standard epsilon is to fine grained
 
         assert np.allclose(
@@ -419,7 +419,7 @@ def test_positions():
         sender.send_message(path.encode(), osc_args)
         val = something_changed.wait(5)
 
-        assert val == True
+        assert val
 
         received_xyz = (
             listener.sources[source_index].x,
@@ -509,7 +509,7 @@ def test_direct_sends():
 
         changed = something_changed.wait()
 
-        assert changed == True
+        assert changed
         assert math.isclose(
             listener.sources[source_index].direct_sends[direct_send_index],
             gain,
@@ -599,7 +599,7 @@ def test_attributes():
 
         changed = something_changed.wait()
 
-        assert changed == True
+        assert changed
         assert math.isclose(
             listener.sources[source_index].attributes[attribute],
             val,

@@ -23,6 +23,11 @@ jobs:
           pip install pytest pyfar
           pip install .
 
+      - name: Lint with Ruff
+        run: |
+          pip install ruff
+          ruff check --output-format=github .
+
       - name: Run tests
         run: |
           pip install pytest pytest-cov
