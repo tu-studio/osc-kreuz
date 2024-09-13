@@ -150,7 +150,7 @@ def test_gains():
         )
         print(f"success for gain path {path}")
     logging.info("unsubscribing")
-    listener.unsubscribe_from_osc_kreuz()
+    del listener
     signal_handler()
     sleep(0.2)
 
@@ -318,7 +318,7 @@ def test_full_positions():
         )
 
     logging.info("unsubscribing")
-    listener.unsubscribe_from_osc_kreuz()
+    del listener
     signal_handler()
     sleep(0.2)
     logging.info("killed osc-kreuz")
@@ -326,10 +326,27 @@ def test_full_positions():
 
 def test_positions():
     # cli runner to run the actual osckreuz
+    port_ui = 4460
+    port_data = 4015
+    port_settings = 4990
+    port_listen = 9870
+
     runner = CliRunner()
     osc_kreuz_thread = Thread(
         target=runner.invoke,
-        args=(main, ["-c", str(test_config.absolute().resolve())]),
+        args=(
+            main,
+            [
+                "-c",
+                str(test_config.absolute().resolve()),
+                "-u",
+                port_ui,
+                "-d",
+                port_data,
+                "-s",
+                port_settings,
+            ],
+        ),
     )
     osc_kreuz_thread.start()
 
@@ -337,11 +354,11 @@ def test_positions():
 
     # listener to receive osc from osc kreuz
     listener = SeamlessListener(
-        n_sources, "127.0.0.1", 9876, "127.0.0.1", 4999, "osckreuz_test"
+        n_sources, "127.0.0.1", port_listen, "127.0.0.1", port_settings, "osckreuz_test"
     )
 
     # sender to send updates to osc-kreuz
-    sender = OSCClient("127.0.0.1", 4455)
+    sender = OSCClient("127.0.0.1", port_data)
 
     # something changed to check if the update sent to the osc-kreuz also came back
     something_changed = Event()
@@ -421,7 +438,7 @@ def test_positions():
         )
 
     logging.info("unsubscribing")
-    listener.unsubscribe_from_osc_kreuz()
+    del listener
     signal_handler()
     sleep(0.2)
     logging.info("killed osc-kreuz")
@@ -500,7 +517,7 @@ def test_direct_sends():
         )
 
     logging.info("unsubscribing")
-    listener.unsubscribe_from_osc_kreuz()
+    del listener
     signal_handler()
     sleep(0.2)
 
@@ -590,13 +607,8 @@ def test_attributes():
         )
 
     logging.info("unsubscribing")
-    listener.unsubscribe_from_osc_kreuz()
+    del listener
     signal_handler()
     sleep(0.2)
 
     logging.info("killed osc-kreuz")
-
-
-if __name__ == "__main__":
-    # test_gains()
-    test_positions()
