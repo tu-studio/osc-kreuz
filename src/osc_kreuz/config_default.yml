@@ -11,20 +11,6 @@ global:
   render_units: ["ambi", "wfs"]
   room_scaling_factor: 1.0 # all incoming positon changes are scaled by this factor
 receivers:
-  - type: audiorouter
-    hosts:
-      - hostname: 127.0.0.1
-        port: 57120
-      - hostname: 127.0.0.1
-        port: 57119
-    updateintervall: 5
-
-  - type: audiorouterWFS
-    hosts:
-      - hostname: 127.0.0.1
-        port: 57121
-    updateintervall: 5
-
   - type: audiomatrix
     hosts:
       - hostname: 127.0.0.1
@@ -44,15 +30,3 @@ receivers:
         format: xyz
 
     updateintervall: 5
-
-  - type: wonder
-    hosts:
-      - hostname: 127.0.0.1
-        port: 58100
-    updateintervall: 50
-
-  - type: scengine
-    hostname: 127.0.0.1
-    port: 57120
-    updateintervall: 10
-    dataformat: aedrad
