@@ -66,10 +66,10 @@ class Coordinate:
     """Baseclass for all coordinates, only __init__() and convert_to() need to be overwritten."""
 
     def __init__(
-        self, position_keys: list[CoordinateKey], initial_values: list
+        self, position_keys: list[CoordinateKey], initial_values: list[float]
     ) -> None:
         self.position_keys = position_keys
-        self.position = {}
+        self.position: dict[CoordinateKey, float] = {}
 
         # initialize position dict
         self.set_all(*initial_values)
@@ -79,7 +79,7 @@ class Coordinate:
     ) -> list[float] | tuple[float, float, float]:
         raise NotImplementedError
 
-    def set_all(self, *values: float):
+    def set_all(self, *values: float) -> None:
         """Sets all coordinates in the order they were declared in the constructor.
 
         Raises:
@@ -103,10 +103,13 @@ class Coordinate:
         """
         return self.get_coordinates(self.position_keys)
 
-    def validate_coordinates(self):
+    def validate_coordinates(self) -> None:
         """overwrite this function if for some coordinates special processing is required"""
+        pass
 
-    def constrain_centered_coordinate(self, val, constrain_range):
+    def constrain_centered_coordinate(
+        self, val: float, constrain_range: float
+    ) -> float:
         half_range = constrain_range / 2
         return ((val + half_range) % constrain_range) - half_range
 

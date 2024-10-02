@@ -2,6 +2,7 @@ from collections.abc import Callable
 from functools import partial
 import ipaddress
 import logging
+from typing import Any
 
 from oscpy.server import OSCThreadServer
 
@@ -197,21 +198,6 @@ class OSCComCenter:
                 log.info(f"port {port} not legit")
             return False
 
-    def checkIp(self, ip) -> bool:
-        ipalright = True
-        try:
-            _ip = "127.0.0.1" if ip == "localhost" else ip
-            _ = ipaddress.ip_address(_ip)
-        except Exception:
-            ipalright = False
-            if self.verbosity > 0:
-                log.info(f"ip address {ip} not legit")
-
-        return ipalright
-
-    def checkIpAndPort(self, ip, port) -> bool:
-        return self.checkIp(ip) and self.checkPort(port)
-
     def oscreceived_debugOscCopy(self, *args):
         ip = ""
         port = 0
@@ -295,7 +281,7 @@ class OSCComCenter:
 
     def setupOscBindings(
         self,
-    ):
+    ) -> None:
         """Sets up all Osc Bindings"""
         self.setupOscSettingsBindings()
 
@@ -592,7 +578,7 @@ class OSCComCenter:
         source_index=-1,
         attribute: skc.SourceAttributes | None = None,
         fromUi: bool = True,
-    ):
+    ) -> bool:
         args_index = 0
         if source_index == -1:
             try:
@@ -617,14 +603,15 @@ class OSCComCenter:
             self.notifyRenderClientsForUpdate(
                 "sourceAttributeChanged", source_index, attribute, fromUi=fromUi
             )
+        return True
 
     def notifyRenderClientsForUpdate(
         self, updateFunction: str, *args, fromUi: bool = True
-    ):
+    ) -> None:
         for receiver in self.receivers:
             updatFunc = getattr(receiver, updateFunction)
             updatFunc(*args)
 
-    def printOSC(self, *args, addr: str = "", port: int = 0):
+    def printOSC(self, *args: Any, addr: str = "", port: int = 0) -> None:
         if self.bPrintOSC:
             log.info("incoming OSC on Port", port, addr, args)

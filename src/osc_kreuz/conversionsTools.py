@@ -4,11 +4,13 @@ import numpy as np
 deg90_rad = np.deg2rad(90)
 
 
-def mag_xyz(x, y, z) -> float:
+def mag_xyz(x: float, y: float, z: float) -> float:
     return np.sqrt(np.square(x) + np.square(y) + np.square(z))
 
 
-def aed2xyz(a, e, d, coordinates_in_degree: bool = True) -> list[float]:
+def aed2xyz(
+    a: float, e: float, d: float, coordinates_in_degree: bool = True
+) -> list[float]:
     if coordinates_in_degree:
         e = np.deg2rad(e)
         a = np.deg2rad(a)
@@ -21,7 +23,9 @@ def aed2xyz(a, e, d, coordinates_in_degree: bool = True) -> list[float]:
     return [x, y, z]
 
 
-def xyz2aed(x, y, z, coordinates_in_degree: bool = True) -> list[float]:
+def xyz2aed(
+    x: float, y: float, z: float, coordinates_in_degree: bool = True
+) -> list[float]:
     dist = mag_xyz(x, y, z)
     azim = np.arctan2(y, x)
     elev = np.arctan2(z, np.sqrt(np.square(x) + np.square(y)))
@@ -34,5 +38,5 @@ def xyz2aed(x, y, z, coordinates_in_degree: bool = True) -> list[float]:
 
 
 # TODO: implement this
-def azi_to_wonderangle(azim) -> float:
+def azi_to_wonderangle(azim: float) -> float:
     return azim

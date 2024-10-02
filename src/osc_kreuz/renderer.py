@@ -178,7 +178,7 @@ class Renderer(object):
     printOutput = verbosity >= 1
 
     @classmethod
-    def createDebugClient(cls, ip, port):
+    def createDebugClient(cls, ip: str, port: int) -> None:
         cls.oscDebugClient = OSCClient(ip, port)
 
     @classmethod

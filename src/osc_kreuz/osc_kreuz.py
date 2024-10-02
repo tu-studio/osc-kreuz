@@ -5,6 +5,7 @@ from pathlib import Path
 import signal
 import sys
 from threading import Event
+from typing import Any
 
 import click
 
@@ -23,11 +24,13 @@ log = logging.getLogger("main")
 stop_event = Event()
 
 
-def signal_handler(*args):
+def signal_handler(*args: Any) -> None:
     stop_event.set()
 
 
-def debug_prints(globalconfig, extendedOscInput, verbose):
+def debug_prints(
+    globalconfig: dict[str, Any], extendedOscInput: bool, verbose: int
+) -> None:
     log.debug("max number of sources is set to %s", str(globalconfig["number_sources"]))
     log.debug("number of rendering units is %s", str(globalconfig["n_renderengines"]))
 
@@ -104,7 +107,15 @@ def debug_prints(globalconfig, extendedOscInput, verbose):
 )
 @click.option("-v", "--verbose", count=True, help="increase verbosity level.")
 @click.version_option()
-def main(config_path, oscdebug, verbose, ip, port_ui, port_data, port_settings):
+def main(
+    config_path: Path,
+    oscdebug: str | None,
+    verbose: int,
+    ip: str | None,
+    port_ui: int | None,
+    port_data: int | None,
+    port_settings: int | None,
+) -> None:
     if verbose > 0:
         log.setLevel(logging.DEBUG)
 
@@ -119,7 +130,9 @@ def main(config_path, oscdebug, verbose, ip, port_ui, port_data, port_settings):
         Renderer.debugCopy = True
 
     # read config values
-    globalconfig = read_config_option(config, skc.globalconfig, default={})
+    globalconfig: dict[str, Any] = read_config_option(
+        config, skc.globalconfig, default={}
+    )
 
     renderengines = read_config_option(
         globalconfig, "render_units", None, ["ambi, wfs"]
