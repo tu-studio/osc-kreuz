@@ -191,9 +191,9 @@ class Renderer(object):
         self,
         dataformat: str = "xyz",
         updateintervall=10,
-        hostname="127.0.0.1",
+        hostname: str | None = None,
         hosts: list[dict] | None = None,
-        port=4002,
+        port: int | None = None,
         sourceattributes=(),
         indexAsValue=0,  # XXX unused
     ):
@@ -202,19 +202,21 @@ class Renderer(object):
         self.posFormat = dataformat
         self.sourceAttributes = sourceattributes
 
-        # check if hosts are defined as an array
         self.hosts: list[tuple[str, int]] = []
-        if hosts is None:
-            self.hosts.append((hostname, int(port)))
-        else:
+        self.receivers: list[OSCClient] = []
+
+        # check if hosts are defined as an array
+        if hostname is not None and port is not None:
+            self.add_receiver(hostname, int(port))
+        if hosts is not None:
             for host in hosts:
                 try:
-                    host_tuple = (host["hostname"], host["port"])
-                    self.hosts.append(host_tuple)
+                    self.add_receiver(host["hostname"], host["port"])
                 except KeyError:
                     raise RendererException("Invalid Host")
 
-        self.updateIntervall = int(updateintervall) / 1000
+        if len(self.hosts) == 0:
+            log.warning(f"Renderer of type {self.my_type()} has no receivers")
 
         # update status for all sources
         self.source_getting_update: list[Event] = [

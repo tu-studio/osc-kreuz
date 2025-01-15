@@ -160,8 +160,8 @@ common settings are:
 | Setting | Description | Default |
 | ----------------- | -------------------------------------------------------------------------------------------------------- | ------- |
 | `type` | Type of the receiver, you should probably use `audiomatrix` | |
-| `hostname` | target host, can be a hostname or an ip address, ignored when `hosts` is set | |
-| `port` | Port the target listens on, ignored when `hosts` is set | |
+| `hostname` | target host, can be a hostname or an ip address, used in conjunction with `port` | |
+| `port` | Port of the target host | |
 | `hosts` | can contain a list of hostnames and ports, allows sending updates to multiple receivers of the same type | |
 | `updateintervall` | time (in ms) to wait between subsequent update bundles | |
 | `dataformat` | format the positional data is sent in. supports a lot of different formats | xyz |
