@@ -6,8 +6,9 @@ from time import time
 from typing import Any
 
 from numpy import iterable
-from oscpy.client import OSCClient
+from oscpy.client import OSCClient, send_message
 
+from osc_kreuz.config import read_config_option
 from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc
 
@@ -28,6 +29,8 @@ class Message:
 
 
 class Update:
+    """Base Class for an Update sent via OSC. Updates with specific requirements should inherit from this one"""
+
     def __init__(
         self,
         path: bytes,
@@ -36,6 +39,18 @@ class Update:
         pre_arg: Any = None,
         post_arg: Any = None,
     ):
+        """Construct a new Update.
+        The values of the Message created out of this Update will look like this, values in <brackets> are optional:
+        [<source_index>, <pre_arg>, value, <**values>,..., <post_arg>]
+
+
+        Args:
+            path (bytes): OSC Path this update should be sent to
+            soundobject (SoundObject): the Soundobject this Update belongs to, usually the get_value() function needs this
+            source_index (int | None, optional): source index of this Soundobject. Needed when the source index . Defaults to None.
+            pre_arg (Any, optional): argument that should be added to OSC Message before the actual values. Defaults to None.
+            post_arg (Any, optional): argument that should be added to OSC Message at the end. Defaults to None.
+        """
         self.soundobject = soundobject
         self.pre_arg = pre_arg
         self.post_arg = post_arg
@@ -43,10 +58,14 @@ class Update:
         self.source_index = source_index
 
     def get_value(self):
+        """Override this function!
+
+        Raises:
+            NotImplementedError: Seemds like you didn't override this function!
+        """
         raise NotImplementedError
 
     def __eq__(self, other):
-        """Overrides the default implementation"""
         if isinstance(other, self.__class__):
             return (
                 isinstance(other, self.__class__)
@@ -218,26 +237,25 @@ class Renderer(object):
         if len(self.hosts) == 0:
             log.warning(f"Renderer of type {self.my_type()} has no receivers")
 
-        # update status for all sources
+        # convert update interval from ms to s
+        self.update_interval = int(updateintervall) / 1000
+
+        # init update semaphore for all sources
         self.source_getting_update: list[Event] = [
             Event() for _ in range(self.numberOfSources)
         ]
 
         # sets are used in update stack, so each source is updated only once during the update process
-        self.updateStack: list[set[Update]] = [
+        self.update_stack: list[set[Update]] = [
             set() for _ in range(self.numberOfSources)
         ]
         # second update Stack that is swapped in during updates
-        self.updateStackSwap: list[set[Update]] = [
+        self.update_stack_swap: list[set[Update]] = [
             set() for _ in range(self.numberOfSources)
         ]
 
         self.debugPrefix = "/genericRenderer"
         self.oscPre = ("/source/" + self.posFormat).encode()
-
-        self.receivers: list[OSCClient] = []
-        for ip, port in self.hosts:
-            self.receivers.append(OSCClient(ip, port, encoding="utf8"))
 
         self.isDataClient = False
 
@@ -258,7 +276,7 @@ class Renderer(object):
         self.receivers.append(OSCClient(hostname, port, encoding="utf8"))
 
     def add_update(self, source_idx: int, update: Update) -> None:
-        self.updateStack[source_idx].add(update)
+        self.update_stack[source_idx].add(update)
         self.update_source(source_idx)
 
     def update_source(self, source_idx) -> None:
@@ -274,15 +292,15 @@ class Renderer(object):
         self.source_getting_update[source_idx].set()
 
         # swap stacks so the stack we are working on isn't written to
-        self.updateStack[source_idx], self.updateStackSwap[source_idx] = (
-            self.updateStackSwap[source_idx],
-            self.updateStack[source_idx],
+        self.update_stack[source_idx], self.update_stack_swap[source_idx] = (
+            self.update_stack_swap[source_idx],
+            self.update_stack[source_idx],
         )
 
         # get messages from updates
         msgs = []
-        while self.updateStackSwap[source_idx]:
-            update: Update = self.updateStackSwap[source_idx].pop()
+        while self.update_stack_swap[source_idx]:
+            update: Update = self.update_stack_swap[source_idx].pop()
             msg = update.to_message()
             msgs.append(msg)
 
@@ -290,30 +308,42 @@ class Renderer(object):
 
         # schedule releasing of update lock
         Timer(
-            self.updateIntervall - (time() - time_start),
+            self.update_interval - (time() - time_start),
             self.release_source_update_lock,
             args=(source_idx,),
         ).start()
 
-    def send_updates(self, msgs):
+    def send_updates(self, msgs, hostname: str | None = None, port: int | None = None):
         """This function sends all messages to the osc clients
 
         Args:
             msgs (list(list)): list of messages
         """
         for msg in msgs:
-            for receiversClient in self.receivers:
-                try:
-                    receiversClient.send_message(msg.path, msg.values)
+            for receiver in self.receivers:
 
+                # if explicit hostname and port are specified skip all receivers that don't match
+                if hostname is not None and port is not None:
+                    if receiver.address != hostname and receiver.port != port:
+                        continue
+
+                try:
+                    start_time = time()
+                    receiver.send_message(msg.path, msg.values, safer=True)
+                    send_time = (time() - start_time) * 1000
+                    if send_time > 10:
+                        log.warning(
+                            f"sending osc update {msg.path} to {receiver.address} took way too long: {send_time}"
+                        )
                 except Exception as e:
-                    log.warning(
-                        f"Exception while sending to {receiversClient.address}:{receiversClient.port}: {e}"
+                    log.exception(
+                        f"Exception while sending to {receiver.address}:{receiver.port}",
+                        exc_info=e,
                     )
 
                 if self.debugCopy:
                     debugOsc = (
-                        f"{self.debugPrefix}/{receiversClient.address}:{receiversClient.port}{msg.path.decode()}"
+                        f"{self.debugPrefix}/{receiver.address}:{receiver.port}{msg.path.decode()}"
                     ).encode()
                     try:
                         self.oscDebugClient.send_message(debugOsc, msg.values)
@@ -325,7 +355,7 @@ class Renderer(object):
 
     def release_source_update_lock(self, source_idx):
         self.source_getting_update[source_idx].clear()
-        if len(self.updateStack[source_idx]) > 0:
+        if len(self.update_stack[source_idx]) > 0:
             self.update_source(source_idx)
 
     # implement these functions in subclasses for registering for specific updates
@@ -369,9 +399,9 @@ class SpatialRenderer(Renderer):
 
 class Wonder(SpatialRenderer):
     def __init__(self, **kwargs):
-        if "dataformat" not in kwargs.keys():
+        if "dataformat" not in kwargs:
             kwargs["dataformat"] = "xy"
-        if "sourceattributes" not in kwargs.keys():
+        if "sourceattributes" not in kwargs:
             kwargs["sourceattributes"] = (
                 skc.SourceAttributes.doppler,
                 skc.SourceAttributes.planewave,
@@ -385,7 +415,7 @@ class Wonder(SpatialRenderer):
         }
         self.oscPre = b"/WONDER/source/position"
 
-        self.interpolTime = self.updateIntervall
+        self.interpolTime = self.update_interval * 0.9
         self.linkPositionAndAngle = True
 
         self.debugPrefix = "/dWonder"
@@ -462,6 +492,55 @@ class Wonder(SpatialRenderer):
                 post_arg=self.interpolTime,
             ),
         )
+
+
+class TWonder(Wonder):
+    oscpath_n_sources = b"/WONDER/global/maxNoSources"
+    oscpath_room_polygon = b"/WONDER/global/renderpolygon"
+    oscpath_activate_source = b"/WONDER/source/activate"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        self.interpolTime = self.update_interval
+        self.linkPositionAndAngle = True
+
+        self.debugPrefix = "/dTWonder"
+
+    def my_type(self) -> str:
+        return "TWonder"
+
+    def add_receiver(self, hostname: str, port: int):
+        if (hostname, port) not in self.hosts:
+            super().add_receiver(hostname, port)
+
+        msgs = []
+        msgs.append(Message(self.oscpath_n_sources, self.numberOfSources))
+
+        # TODO do this somewhere better
+        if "room_polygon" in self.globalConfig:
+            room_name = read_config_option(
+                self.globalConfig, "room_name", str, "default_room"
+            )
+            room_polygon = read_config_option(
+                self.globalConfig, "room_polygon", list, []
+            )
+            args = [room_name, len(room_polygon)]
+            for point in room_polygon:
+                if len(point) != 3:
+                    raise RendererException(f"Invalid polygon point: {point}")
+                for p in point:
+                    if not isinstance(p, float):
+                        raise RendererException(
+                            f"Invalid type for coordinate {p} of polygon"
+                        )
+
+                args.extend(point)
+            msgs.append(Message(self.oscpath_room_polygon, args))
+
+        for i in range(self.numberOfSources):
+            msgs.append(Message(self.oscpath_activate_source, i))
+        self.send_updates(msgs)
 
 
 class Audiorouter(Renderer):

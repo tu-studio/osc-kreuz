@@ -2,12 +2,13 @@ from collections.abc import Callable
 from functools import partial
 import ipaddress
 import logging
+from threading import Semaphore
 from typing import Any
 
 from oscpy.server import OSCThreadServer
 
 from osc_kreuz.coordinates import get_all_coordinate_formats
-from osc_kreuz.renderer import Renderer, ViewClient
+from osc_kreuz.renderer import Renderer, TWonder, ViewClient
 from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc
 
@@ -48,6 +49,7 @@ class OSCComCenter:
         self.port_ui = port_ui
         self.port_data = port_data
         self.port_settings = port_settings
+        self.connection_semaphore = Semaphore()
 
     def setVerbosity(self, v: int):
         self.verbosity = v
@@ -63,35 +65,38 @@ class OSCComCenter:
         # also allow oscrouter in settings path for backwards compatibility
         for base_path in ["oscrouter", "osckreuz"]:
             self.osc_setting_server.bind(
-                f"/{base_path}/debug/osccopy".encode(), self.oscreceived_debugOscCopy
+                f"/{base_path}/debug/osccopy".encode(), self.osc_handler_osccopy
             )
             self.osc_setting_server.bind(
-                f"/{base_path}/debug/verbose".encode(), self.oscreceived_verbose
+                f"/{base_path}/debug/verbose".encode(), self.osc_handler_verbose
             )
             self.osc_setting_server.bind(
-                f"/{base_path}/subscribe".encode(), self.oscreceived_subscriptionRequest
+                f"/{base_path}/subscribe".encode(), self.osc_handler_subscribe
             )
             self.osc_setting_server.bind(
                 f"/{base_path}/unsubscribe".encode(), self.osc_handler_unsubscribe
             )
             self.osc_setting_server.bind(
-                f"/{base_path}/ping".encode(), self.oscreceived_ping
+                f"/{base_path}/ping".encode(), self.osc_handler_ping
             )
             self.osc_setting_server.bind(
-                f"/{base_path}/pong".encode(), self.oscreceived_pong
+                f"/{base_path}/pong".encode(), self.osc_handler_pong
             )
             self.osc_setting_server.bind(
-                f"/{base_path}/dump".encode(), self.oscreceived_dump
+                f"/{base_path}/dump".encode(), self.osc_handler_dump
             )
+        self.osc_setting_server.bind(
+            b"/WONDER/stream/render/connect", self.osc_handler_twonder_connect
+        )
 
-    def oscreceived_ping(self, *args):
+    def osc_handler_ping(self, *args):
 
         if self.checkPort(args[0]):
             self.osc_setting_server.answer(
                 b"/oscrouter/pong", port=args[0], values=["osc-kreuz".encode()]
             )
 
-    def oscreceived_pong(self, *args):
+    def osc_handler_pong(self, *args):
 
         try:
             clientName = args[0]
@@ -103,7 +108,7 @@ class OSCComCenter:
                     _name = args[0]
                 log.info("no renderer for pong message {}".format(_name))
 
-    def oscreceived_subscriptionRequest(self, *args) -> None:
+    def osc_handler_subscribe(self, *args) -> None:
         """OSC Callback for subscription Requests.
 
         These requests follow the format:
@@ -115,7 +120,6 @@ class OSCComCenter:
         args[3] send source index as value instead of inside the osc prefix
         args[4] source position update rate
         """
-
         viewClientInitValues = {}
         vCName = args[0]
         subArgs = len(args)
@@ -154,6 +158,43 @@ class OSCComCenter:
             if self.verbosity > 0:
                 log.info("not enough arguments für view client")
 
+    def osc_handler_twonder_connect(self, *args) -> None:
+
+        # get name of twonder (only sent to osc path with signature "s")
+        name = "default_twonder"
+        if len(args) == 1:
+            name = args[0]
+
+        # parse hostname and port
+        if len(args) == 2:
+            hostname = args[0]
+            port = args[1]
+        else:
+            hostname = self.osc_setting_server.get_sender()[1]
+            port = self.osc_setting_server.get_sender()[2]
+
+        if not self.checkPort(port) or type(hostname) != str:
+            log.warning("Invalid twonder connection request")
+            return
+
+        # get twonder from receivers list if it already exists
+        with self.connection_semaphore:
+            twonder = next(
+                (
+                    receiver
+                    for receiver in self.receivers
+                    if isinstance(receiver, TWonder)
+                ),
+                None,
+            )
+            if twonder is not None:
+                twonder.add_receiver(hostname, port)
+                log.info("new twonder connected to receiver")
+            else:
+                receiver = TWonder(hostname=hostname, port=port, updateintervall=50)
+                self.receivers.append(receiver)
+                log.info("twonder connected")
+
     def osc_handler_unsubscribe(self, *args) -> None:
         """OSC Callback for unsubscribe Requests.
 
@@ -174,7 +215,7 @@ class OSCComCenter:
         else:
             log.warning("not enough arguments für view client")
 
-    def oscreceived_dump(self, *args):
+    def osc_handler_dump(self, *args):
         pass
         # TODO: dump all source data to renderer
 
@@ -191,6 +232,14 @@ class OSCComCenter:
             log.warning(f"tried to delete receiver {alias}, but it does not exist")
 
     def checkPort(self, port) -> bool:
+        """returns true when the port is of type int and in the valid range
+
+        Args:
+            port (Any): port to be checked
+
+        Returns:
+            bool: True if port is valid
+        """
         if type(port) is int and 1023 < port < 65535:
             return True
         else:
@@ -198,7 +247,7 @@ class OSCComCenter:
                 log.info(f"port {port} not legit")
             return False
 
-    def oscreceived_debugOscCopy(self, *args):
+    def osc_handler_osccopy(self, *args):
         ip = ""
         port = 0
         if len(args) == 2:
@@ -229,7 +278,7 @@ class OSCComCenter:
 
         Renderer.debugCopy = False
 
-    def oscreceived_verbose(self, *args):
+    def osc_handler_verbose(self, *args):
         vvvv = -1
         try:
             vvvv = int(args[0])

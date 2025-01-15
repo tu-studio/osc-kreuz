@@ -98,7 +98,7 @@ def check_source_update(
         expected_path = [expected_path]
         expected_output = [expected_output]
 
-    s = renderer.updateStack[source_idx]
+    s = renderer.update_stack[source_idx]
 
     n_expected = len(expected_path)
     assert len(s) == 0
@@ -130,7 +130,7 @@ def check_source_update(
 def test_wonder_renderer():
     conf = {"type": "Wonder", "hosts": [], "updateintervall": 5}
     c = prepare_renderer(conf)
-    s = c.updateStack[0]
+    s = c.update_stack[0]
     so = c.sources[0]
     assert len(s) == 0
     assert isinstance(c, r.Wonder)
@@ -167,7 +167,7 @@ def test_audiomatrix_renderer():
         ],
     }
     c = prepare_renderer(conf)
-    s = c.updateStack[0]
+    s = c.update_stack[0]
     so = c.sources[0]
     assert len(s) == 0
     assert isinstance(c, r.AudioMatrix)
@@ -194,7 +194,7 @@ def test_audiomatrix_renderer():
 def test_audiorouter_renderer():
     conf = {"type": "audiorouter", "hosts": [], "updateintervall": 5}
     c = prepare_renderer(conf)
-    s = c.updateStack[0]
+    s = c.update_stack[0]
     assert len(s) == 0
     assert isinstance(c, r.Audiorouter)
 
@@ -217,7 +217,7 @@ def test_audiorouter_renderer():
 def test_audiorouterWFS_renderer():
     conf = {"type": "audiorouterWFS", "hosts": [], "updateintervall": 5}
     c = prepare_renderer(conf)
-    s = c.updateStack[0]
+    s = c.update_stack[0]
     assert len(s) == 0
     assert isinstance(c, r.AudiorouterWFS)
 

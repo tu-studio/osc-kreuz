@@ -10,7 +10,17 @@ global:
   data_port_timeout: 2 # time a change in the ui-port blocks incoming automation, set to 0 to deactivate this feature
   render_units: ["ambi", "wfs"]
   room_scaling_factor: 6.046 # all incoming positon changes are scaled by this factor
-
+  room_name: EN325
+  room_polygon:
+    - [3.023, 1.620, 1.4]
+    - [3.023, -1.620, 1.4]
+    - [1.620, -2.430, 1.4]
+    - [-1.620, -2.430, 1.4]
+    - [-3.023, -1.620, 1.4]
+    - [-3.023, 1.620, 1.4]
+    - [-1.620, 2.430, 1.4]
+    - [1.620, 2.430, 1.4]
+  
 receivers:
   - type: audiomatrix
     hosts:
