@@ -120,7 +120,7 @@ def main(
         log.setLevel(logging.DEBUG)
 
     try:
-    config = read_config(config_path)
+        config = read_config(config_path)
     except ConfigError:
         sys.exit(-1)
 
