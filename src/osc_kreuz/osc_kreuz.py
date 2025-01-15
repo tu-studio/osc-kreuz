@@ -9,7 +9,7 @@ from typing import Any
 
 import click
 
-from osc_kreuz.config import read_config, read_config_option
+from osc_kreuz.config import ConfigError, read_config, read_config_option
 import osc_kreuz.osccomcenter as osccomcenter
 from osc_kreuz.renderer import Renderer
 import osc_kreuz.renderer as rendererclass
@@ -119,7 +119,10 @@ def main(
     if verbose > 0:
         log.setLevel(logging.DEBUG)
 
+    try:
     config = read_config(config_path)
+    except ConfigError:
+        sys.exit(-1)
 
     # setup debug osc client
     if oscdebug:
@@ -177,7 +180,7 @@ def main(
 
     # creating audiorouters
     log.info("setting up receivers")
-    if "receivers" in config:
+    if "receivers" in config and isinstance(config["receivers"], list):
         for receiver_config in config["receivers"]:
             if "type" not in receiver_config:
                 log.warning("receiver has no type specified, skipping")

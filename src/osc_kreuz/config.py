@@ -36,7 +36,23 @@ deprecated_config_strings = {
 }
 
 
-def read_config(config_path) -> dict:
+class ConfigError(Exception):
+    pass
+
+
+def read_config(config_path: str | Path | None) -> dict:
+    """reads the config file from path config_path. if no path is supplied go through the default config paths, if no file is found use the embedded default config
+
+    Args:
+        config_path (str | Path | None): path of the config file
+
+    Raises:
+        ConfigError: raised when loading the file failed
+
+    Returns:
+        dict: the config as a dict
+    """
+
     # get Config Path:
     if config_path is None:
         # check different paths for a config file, with the highest one taking precedence
@@ -53,12 +69,20 @@ def read_config(config_path) -> dict:
     if config_path is None:
         log.warning("Could not find config, loading default config")
         # load the default config embedded into this package using files
-        config_path = files("osc_kreuz").joinpath("config_default.yml")
-        config = yaml.load(config_path.read_bytes(), Loader=yaml.Loader)
+        default_config = files("osc_kreuz").joinpath("config_default.yml")
+        try:
+            config = yaml.load(default_config.read_bytes(), Loader=yaml.Loader)
+        except yaml.YAMLError as e:
+            log.error(f"Failed to load the default config file, Uh-Oh!: YAMLError {e}")
+            raise ConfigError
     else:
         # read config file
         with open(config_path) as f:
-            config = yaml.load(f, Loader=yaml.Loader)
+            try:
+                config = yaml.load(f, Loader=yaml.Loader)
+            except yaml.YAMLError as e:
+                log.error(f"Failed to load config file: YAMLError {e}")
+                raise ConfigError
 
     return config
 
