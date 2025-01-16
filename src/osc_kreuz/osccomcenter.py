@@ -161,6 +161,7 @@ class OSCComCenter:
     def osc_handler_twonder_connect(self, *args) -> None:
 
         # get name of twonder (only sent to osc path with signature "s")
+        # TODO do something useful with the name
         name = "default_twonder"
         if len(args) == 1:
             name = args[0]
@@ -173,8 +174,8 @@ class OSCComCenter:
             hostname = self.osc_setting_server.get_sender()[1]
             port = self.osc_setting_server.get_sender()[2]
 
-        if not self.checkPort(port) or type(hostname) != str:
-            log.warning("Invalid twonder connection request")
+        if not self.checkPort(port) or isinstance(hostname, str):
+            log.warning(f"Invalid twonder connection request by {name}")
             return
 
         # get twonder from receivers list if it already exists
@@ -189,11 +190,11 @@ class OSCComCenter:
             )
             if twonder is not None:
                 twonder.add_receiver(hostname, port)
-                log.info("new twonder connected to receiver")
+                log.info(f"new twonder {name} connected to receiver")
             else:
                 receiver = TWonder(hostname=hostname, port=port, updateintervall=50)
                 self.receivers.append(receiver)
-                log.info("twonder connected")
+                log.info(f"twonder {name} connected")
 
     def osc_handler_unsubscribe(self, *args) -> None:
         """OSC Callback for unsubscribe Requests.

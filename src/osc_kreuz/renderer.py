@@ -6,7 +6,7 @@ from time import time
 from typing import Any
 
 from numpy import iterable
-from oscpy.client import OSCClient, send_message
+from oscpy.client import OSCClient
 
 from osc_kreuz.config import read_config_option
 from osc_kreuz.soundobject import SoundObject
