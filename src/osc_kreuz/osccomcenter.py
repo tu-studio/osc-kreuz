@@ -174,7 +174,7 @@ class OSCComCenter:
             hostname = self.osc_setting_server.get_sender()[1]
             port = self.osc_setting_server.get_sender()[2]
 
-        if not self.checkPort(port) or isinstance(hostname, str):
+        if not self.checkPort(port) or not isinstance(hostname, str):
             log.warning(f"Invalid twonder connection request by {name}")
             return
 
