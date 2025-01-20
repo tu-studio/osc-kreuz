@@ -91,7 +91,7 @@ class OSCComCenter:
 
     def osc_handler_ping(self, *args):
 
-        if self.checkPort(args[0]):
+        if self.checkPort(args[0].decode()):
             self.osc_setting_server.answer(
                 b"/oscrouter/pong", port=args[0], values=["osc-kreuz".encode()]
             )
@@ -99,7 +99,7 @@ class OSCComCenter:
     def osc_handler_pong(self, *args):
 
         try:
-            clientName = args[0]
+            clientName = args[0].decode()
             self.clientSubscriptions[clientName].receivedIsAlive()
         except Exception:
             if self.verbosity > 0:
@@ -121,7 +121,7 @@ class OSCComCenter:
         args[4] source position update rate
         """
         viewClientInitValues = {}
-        vCName = args[0]
+        vCName = args[0].decode()
         subArgs = len(args)
         if subArgs >= 2:
             if self.checkPort(args[1]):
@@ -206,7 +206,7 @@ class OSCComCenter:
         """
         log.info("unsubscribe request")
         if len(args) >= 1:
-            client_name = args[0]
+            client_name = args[0].decode()
             try:
                 view_client = self.clientSubscriptions[client_name]
                 self.deleteClient(view_client, client_name)

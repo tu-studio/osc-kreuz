@@ -7,7 +7,8 @@ from time import thread_time, time
 from typing import Any
 
 from numpy import iterable
-from oscpy.client import OSCClient
+
+from pythonosc.udp_client import SimpleUDPClient
 
 from osc_kreuz.config import read_config_option
 from osc_kreuz.soundobject import SoundObject
@@ -22,8 +23,8 @@ class RendererException(Exception):
 
 
 class Message:
-    def __init__(self, path: bytes, values: Any) -> None:
-        self.path = path
+    def __init__(self, path: str, values: Any) -> None:
+        self.path: str = path
         if isinstance(values, str) or not iterable(values):
             values = [values]
         self.values: Iterable[Any] = values
@@ -34,7 +35,7 @@ class Update:
 
     def __init__(
         self,
-        path: bytes,
+        path: str,
         soundobject: SoundObject,
         source_index: int | None = None,
         pre_arg: Any = None,
@@ -46,7 +47,7 @@ class Update:
 
 
         Args:
-            path (bytes): OSC Path this update should be sent to
+            path (str): OSC Path this update should be sent to
             soundobject (SoundObject): the Soundobject this Update belongs to, usually the get_value() function needs this
             source_index (int | None, optional): source index of this Soundobject. Needed when the source index . Defaults to None.
             pre_arg (Any, optional): argument that should be added to OSC Message before the actual values. Defaults to None.
@@ -107,7 +108,7 @@ class Update:
 class PositionUpdate(Update):
     def __init__(
         self,
-        path: bytes,
+        path: str,
         soundobject: SoundObject,
         coord_fmt: str,
         source_index: int | None = None,
@@ -124,7 +125,7 @@ class PositionUpdate(Update):
 class GainUpdate(Update):
     def __init__(
         self,
-        path: bytes,
+        path: str,
         soundobject: SoundObject,
         render_idx: int,
         source_index: int | None = None,
@@ -144,7 +145,7 @@ class GainUpdate(Update):
 class DirectSendUpdate(Update):
     def __init__(
         self,
-        path: bytes,
+        path: str,
         soundobject: SoundObject,
         send_index: int,
         source_index: int | None = None,
@@ -164,7 +165,7 @@ class DirectSendUpdate(Update):
 class AttributeUpdate(Update):
     def __init__(
         self,
-        path: bytes,
+        path: str,
         attribute: skc.SourceAttributes,
         soundobject: SoundObject,
         source_index: int | None = None,
@@ -193,13 +194,13 @@ class Renderer(object):
     sources: list[SoundObject] = []
     globalConfig: dict = {}
     debugCopy: bool = False
-    oscDebugClient: OSCClient
+    oscDebugClient: SimpleUDPClient
 
     printOutput = verbosity >= 1
 
     @classmethod
     def createDebugClient(cls, ip: str, port: int) -> None:
-        cls.oscDebugClient = OSCClient(ip, port)
+        cls.oscDebugClient = SimpleUDPClient(ip, port)
 
     @classmethod
     def setVerbosity(cls, v: int):
@@ -223,7 +224,7 @@ class Renderer(object):
         self.sourceAttributes = sourceattributes
 
         self.hosts: list[tuple[str, int]] = []
-        self.receivers: list[tuple[str, OSCClient]] = []
+        self.receivers: list[tuple[str, SimpleUDPClient]] = []
 
         # check if hosts are defined as an array
         if hostname is not None and port is not None:
@@ -255,7 +256,7 @@ class Renderer(object):
         ]
 
         self.debugPrefix = "/genericRenderer"
-        self.oscPre = ("/source/" + self.posFormat).encode()
+        self.oscPre = "/source/" + self.posFormat
 
         self.isDataClient = False
 
@@ -264,7 +265,7 @@ class Renderer(object):
     def print_self_information(self, print_pos_format=True):
         log.info(f"Initialized renderer {self.my_type()}")
         hosts_str = ", ".join(
-            [f"{hostname}:{receiver.port}" for hostname, receiver in self.receivers]
+            [f"{hostname}:{receiver._port}" for hostname, receiver in self.receivers]
         )
         log.info(f"\thosts: {hosts_str}")
         if print_pos_format:
@@ -276,10 +277,9 @@ class Renderer(object):
     def add_receiver(self, hostname: str, port: int):
         # TODO get addr info
         ip = socket.gethostbyname(hostname)
-        self.receivers.append((hostname, OSCClient(ip, port, encoding="utf8")))
+        self.receivers.append((hostname, SimpleUDPClient(ip, port)))
 
     def add_update(self, source_idx: int, update: Update) -> None:
-        log.info(f"adding update for source {source_idx}")
         self.update_stack[source_idx].add(update)
         self.update_source(source_idx)
 
@@ -341,7 +341,7 @@ class Renderer(object):
 
                 # if explicit hostname and port are specified skip all receivers that don't match
                 if hostname is not None and port is not None:
-                    if r_hostname != hostname and receiver.port != port:
+                    if r_hostname != hostname and receiver._port != port:
                         continue
 
                 try:
@@ -355,18 +355,16 @@ class Renderer(object):
                     send_time = (t2 - t1) * 1000
                     if send_time > 10:
                         log.warning(
-                            f"sending osc update {msg.path} to {receiver.address} took way too long: {round(send_time,2)}ms, (thread time: {round((t2_thread - t1_thread)*1000, 2)})"
+                            f"sending osc update {msg.path} to {receiver._address} took way too long: {round(send_time,2)}ms, (thread time: {round((t2_thread - t1_thread)*1000, 2)})"
                         )
                 except Exception as e:
                     log.exception(
-                        f"Exception while sending to {receiver.address}:{receiver.port}",
+                        f"Exception while sending to {receiver._address}:{receiver._port}",
                         exc_info=e,
                     )
 
                 if self.debugCopy:
-                    debugOsc = (
-                        f"{self.debugPrefix}/{receiver.address}:{receiver.port}{msg.path.decode()}"
-                    ).encode()
+                    debugOsc = f"{self.debugPrefix}/{receiver._address}:{receiver._port}{msg.path}"
                     try:
                         self.oscDebugClient.send_message(debugOsc, msg.values)
                     except Exception:
@@ -377,6 +375,8 @@ class Renderer(object):
 
     def release_source_update_lock(self, source_idx):
         self.update_semaphore[source_idx].release()
+        if len(self.update_stack[source_idx]) > 0:
+            self.update_source(source_idx)
 
     # implement these functions in subclasses for registering for specific updates
     def sourceAttributeChanged(self, source_idx, attribute):
@@ -391,13 +391,13 @@ class Renderer(object):
     def sourcePositionChanged(self, source_idx):
         pass
 
-    def oscDebugSend(self, oscStr, data: list):
-        decStr = oscStr.decode()
+    def oscDebugSend(self, oscStr: str, data: list):
+        decStr = oscStr
         newOscAddr = self.debugPrefix + decStr
-        self.oscDebugClient.send_message(newOscAddr.encode(), data)
+        self.oscDebugClient.send_message(newOscAddr, data)
 
-    def printOscOutput(self, oscStr, data: list):
-        decStr = oscStr.decode()
+    def printOscOutput(self, oscStr: str, data: list):
+        decStr = oscStr
         log.debug("OSC out", self.debugPrefix, decStr, data)
 
 
@@ -429,11 +429,11 @@ class Wonder(SpatialRenderer):
         super(Wonder, self).__init__(**kwargs)
 
         self.attributeOsc = {
-            skc.SourceAttributes.doppler: b"/WONDER/source/dopplerEffect",
-            skc.SourceAttributes.planewave: b"/WONDER/source/type",
-            skc.SourceAttributes.angle: b"/WONDER/source/angle",
+            skc.SourceAttributes.doppler: "/WONDER/source/dopplerEffect",
+            skc.SourceAttributes.planewave: "/WONDER/source/type",
+            skc.SourceAttributes.angle: "/WONDER/source/angle",
         }
-        self.oscPre = b"/WONDER/source/position"
+        self.oscPre = "/WONDER/source/position"
 
         self.interpolTime = self.update_interval * 0.9
         self.linkPositionAndAngle = True
@@ -515,9 +515,9 @@ class Wonder(SpatialRenderer):
 
 
 class TWonder(Wonder):
-    oscpath_n_sources = b"/WONDER/global/maxNoSources"
-    oscpath_room_polygon = b"/WONDER/global/renderpolygon"
-    oscpath_activate_source = b"/WONDER/source/activate"
+    oscpath_n_sources = "/WONDER/global/maxNoSources"
+    oscpath_room_polygon = "/WONDER/global/renderpolygon"
+    oscpath_activate_source = "/WONDER/source/activate"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -532,7 +532,7 @@ class TWonder(Wonder):
 
     def add_receiver(self, hostname: str, port: int):
         if (hostname, port) not in (
-            (hostname, receiver.port) for hostname, receiver in self.receivers
+            (hostname, receiver._port) for hostname, receiver in self.receivers
         ):
             super().add_receiver(hostname, port)
 
@@ -571,9 +571,9 @@ class Audiorouter(Renderer):
         super(Audiorouter, self).__init__(**kwargs)
 
         self.debugPrefix = "/dAudiorouter"
-        self.oscpre_renderGain = b"/source/send/spatial"
-        self.oscpre_reverbGain = b"/source/reverb/gain"
-        self.oscpre_directSend = b"/source/send/direct"
+        self.oscpre_renderGain = "/source/send/spatial"
+        self.oscpre_reverbGain = "/source/reverb/gain"
+        self.oscpre_directSend = "/source/send/direct"
 
     def print_self_information(self, print_pos_format=False):
         super().print_self_information(print_pos_format=print_pos_format)
@@ -644,8 +644,8 @@ class AudioMatrix(Renderer):
     def __init__(self, paths: Iterable[dict["str", Any]], **kwargs):
         super().__init__(**kwargs)
         self.debugPrefix = "/dAudioMatrix"
-        self.gain_paths: dict[int, list[bytes]] = {}
-        self.pos_paths: list[tuple[bytes, str]] = []
+        self.gain_paths: dict[int, list[str]] = {}
+        self.pos_paths: list[tuple[str, str]] = []
 
         # this dict is used to translate between render unit index and render unit name
         self.render_unit_indices = {}
@@ -665,13 +665,13 @@ class AudioMatrix(Renderer):
             if path_type == "gain":
                 renderer = path["renderer"]
                 renderer_index = self.render_unit_indices[renderer]
-                self.gain_paths[renderer_index].append(osc_path.encode())
+                self.gain_paths[renderer_index].append(osc_path)
             elif path_type in ["position", "pos"]:
                 try:
                     coord_fmt = path["format"]
                 except KeyError:
                     coord_fmt = "xyz"
-                self.pos_paths.append((osc_path.encode(), coord_fmt))
+                self.pos_paths.append((osc_path, coord_fmt))
 
         log.debug("Audio Matrix initialized")
 
@@ -737,7 +737,7 @@ class SuperColliderEngine(SpatialRenderer):
             kwargs["dataformat"] = "aed"
         super(SuperColliderEngine, self).__init__(**kwargs)
 
-        self.oscPre = b"/source/pos/aed"
+        self.oscPre = "/source/pos/aed"
 
         self.debugPrefix = "/dSuperCollider"
 
@@ -749,24 +749,25 @@ class ViewClient(SpatialRenderer):
     def my_type(self) -> str:
         return "viewClient: {}".format(self.alias)
 
-    def __init__(self, aliasname, **kwargs):
+    def __init__(self, aliasname: str, **kwargs):
         self.alias = aliasname
+        log.info(type(self.alias))
 
         super(ViewClient, self).__init__(**kwargs)
 
         self.pingCounter = 0
 
-        self.debugPrefix = "/d{}".format(aliasname.decode())
+        self.debugPrefix = "/d{}".format(aliasname)
 
         self.indexAsValue = False
         if "indexAsValue" in kwargs.keys():
             self.indexAsValue = kwargs["indexAsValue"]
 
         # TODO initialize variables only once, and with a consistent type pl0x
-        self.idxSourceOscPrePos = [b""] * self.numberOfSources
+        self.idxSourceOscPrePos = [""] * self.numberOfSources
         self.idxSourceOscPreAttri = [{}] * self.numberOfSources
         self.idxSourceOscPreRender = [
-            [b"" for j in range(self.globalConfig["n_renderengines"])]
+            ["" for j in range(self.globalConfig["n_renderengines"])]
             for i in range(self.numberOfSources)
         ]
 
@@ -784,12 +785,10 @@ class ViewClient(SpatialRenderer):
 
     def createOscPrefixes(self):
         for i in range(self.numberOfSources):
-            self.idxSourceOscPrePos[i] = "/source/{}/{}".format(
-                i + 1, self.posFormat
-            ).encode()
+            self.idxSourceOscPrePos[i] = "/source/{}/{}".format(i + 1, self.posFormat)
             _aDic = {}
             for attr in skc.knownAttributes:
-                _aDic[attr] = "/source/{}/{}".format(i + 1, attr).encode()
+                _aDic[attr] = "/source/{}/{}".format(i + 1, attr)
 
             self.idxSourceOscPreAttri[i] = _aDic
 
@@ -798,26 +797,22 @@ class ViewClient(SpatialRenderer):
             except KeyError:
                 render_units = []
 
-            renderList = [b""] * self.globalConfig["n_renderengines"]
+            renderList = [""] * self.globalConfig["n_renderengines"]
             if (
                 "ambi" in render_units
                 and "wfs" in render_units
                 and "reverb" in render_units
             ):
-                renderList[render_units.index("ambi")] = "/source/{}/ambi".format(
-                    i + 1
-                ).encode()
-                renderList[render_units.index("wfs")] = "/source/{}/wfs".format(
-                    i + 1
-                ).encode()
+                renderList[render_units.index("ambi")] = "/source/{}/ambi".format(i + 1)
+                renderList[render_units.index("wfs")] = "/source/{}/wfs".format(i + 1)
                 renderList[render_units.index("reverb")] = "/source/{}/reverb".format(
                     i + 1
-                ).encode()
+                )
             else:
                 for j in range(self.globalConfig["n_renderengines"]):
                     self.idxSourceOscPreRender[i][j] = "/source/{}/send/{}".format(
                         i + 1, j
-                    ).encode()
+                    )
             self.idxSourceOscPreRender[i] = renderList
 
     def checkAlive(self, deleteClient):
@@ -828,7 +823,7 @@ class ViewClient(SpatialRenderer):
                 # get first receiver tuple, get actual receiver
                 self.receivers[0][1].send_message(
                     # TODO change ping path to constant defined somewhere else
-                    b"/oscrouter/ping",
+                    "/oscrouter/ping",
                     [self.globalConfig[skc.inputport_settings]],
                 )
             except Exception as e:
@@ -868,7 +863,7 @@ class ViewClient(SpatialRenderer):
             path = self.idxSourceOscPreRender[source_idx][render_idx]
             source_index_for_update = None
         else:
-            path = b"/source/send"
+            path = "/source/send"
             source_index_for_update = source_idx
         self.add_update(
             source_idx,
@@ -882,7 +877,7 @@ class ViewClient(SpatialRenderer):
         )
 
     def sourceDirectSendChanged(self, source_idx, send_idx):
-        path = b"/source/direct"
+        path = "/source/direct"
         self.add_update(
             source_idx,
             DirectSendUpdate(
@@ -895,7 +890,7 @@ class ViewClient(SpatialRenderer):
         )
 
     def sourceAttributeChanged(self, source_idx, attribute):
-        path = b"/source/attribute"
+        path = "/source/attribute"
         self.add_update(
             source_idx,
             AttributeUpdate(
@@ -1020,12 +1015,12 @@ class SeamlessPlugin(SpatialRenderer):
 
         self.oscAddrs: dict = {}
 
-        self.oscAddrs[self.posFormat] = f"/source/pos/{self.posFormat}".encode()
+        self.oscAddrs[self.posFormat] = f"/source/pos/{self.posFormat}"
 
         for vv in self.sourceAttributes:
-            self.oscAddrs[vv.value] = "/{}".format(vv.value).encode()
+            self.oscAddrs[vv.value] = "/{}".format(vv.value)
 
-        self.oscAddrs["renderGain"] = "/send/gain".encode()
+        self.oscAddrs["renderGain"] = "/send/gain"
 
         self.debugPrefix = "/dSeamlessPlugin"
 

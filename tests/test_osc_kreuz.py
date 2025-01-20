@@ -9,7 +9,7 @@ from time import sleep
 
 from click.testing import CliRunner
 import numpy as np
-from oscpy.client import OSCClient
+from pythonosc.udp_client import SimpleUDPClient
 
 from osc_kreuz.config import read_config
 import osc_kreuz.coordinates
@@ -35,7 +35,7 @@ renderers = config["global"]["render_units"]
 n_renderers = len(renderers)
 
 
-def build_gain_test_path(path, renderer_in_path, source_index_in_path):
+def build_gain_test_path(path: str, renderer_in_path: bool, source_index_in_path: bool):
     source_index = random.randint(0, n_sources - 1)
     val = random.random() * 2
     renderer_index = random.randint(0, n_renderers - 1)
@@ -118,7 +118,7 @@ def test_gains():
     )
 
     # sender to send updates to osc-kreuz
-    sender = OSCClient("127.0.0.1", port_ui)
+    sender = SimpleUDPClient("127.0.0.1", port_ui)
 
     # something changed to check if the update sent to the osc-kreuz also came back
     something_changed = Event()
@@ -137,8 +137,7 @@ def test_gains():
     # test a lot of different paths
     for path, args, source_index, renderer, expected_val in build_all_gain_paths():
         something_changed.clear()
-
-        sender.send_message(path.encode(), args)
+        sender.send_message(path, args)
         val = something_changed.wait(5)
 
         assert val
@@ -150,7 +149,8 @@ def test_gains():
         )
         print(f"success for gain path {path}")
     logging.info("unsubscribing")
-    del listener
+
+    listener.shutdown()
     signal_handler()
     sleep(0.2)
 
@@ -248,6 +248,7 @@ def test_full_positions():
                 port_data,
                 "-s",
                 port_settings,
+                "-v",
             ],
         ),
     )
@@ -266,7 +267,7 @@ def test_full_positions():
     )
 
     # sender to send updates to osc-kreuz
-    sender = OSCClient("127.0.0.1", port_ui)
+    sender = SimpleUDPClient("127.0.0.1", port_ui)
 
     # something changed to check if the update sent to the osc-kreuz also came back
     something_changed = Event()
@@ -300,7 +301,7 @@ def test_full_positions():
             listener.sources[source_index],
         )
 
-        sender.send_message(path.encode(), args)
+        sender.send_message(path, args)
         val = something_changed.wait(5)
 
         assert val
@@ -318,7 +319,7 @@ def test_full_positions():
         )
 
     logging.info("unsubscribing")
-    del listener
+    listener.shutdown()
     signal_handler()
     sleep(0.2)
     logging.info("killed osc-kreuz")
@@ -358,7 +359,7 @@ def test_positions():
     )
 
     # sender to send updates to osc-kreuz
-    sender = OSCClient("127.0.0.1", port_data)
+    sender = SimpleUDPClient("127.0.0.1", port_data)
 
     # something changed to check if the update sent to the osc-kreuz also came back
     something_changed = Event()
@@ -416,7 +417,7 @@ def test_positions():
 
         expected_xyz = coordinate.convert_to(CoordinateSystemType.Cartesian)
 
-        sender.send_message(path.encode(), osc_args)
+        sender.send_message(path, osc_args)
         val = something_changed.wait(5)
 
         assert val
@@ -438,7 +439,7 @@ def test_positions():
         )
 
     logging.info("unsubscribing")
-    del listener
+    listener.shutdown()
     signal_handler()
     sleep(0.2)
     logging.info("killed osc-kreuz")
@@ -483,7 +484,7 @@ def test_direct_sends():
     )
 
     # sender to send updates to osc-kreuz
-    sender = OSCClient("127.0.0.1", port_ui)
+    sender = SimpleUDPClient("127.0.0.1", port_ui)
 
     # something changed to check if the update sent to the osc-kreuz also came back
     something_changed = Event()
@@ -503,9 +504,9 @@ def test_direct_sends():
         source_index = random.randint(0, n_sources - 1)
         gain = random.random() * 2
         direct_send_index = random.randint(0, n_direct_sends - 1)
-        path = b"/source/send/direct"
+        path = "/source/send/direct"
 
-        sender.send_message(path, (source_index + 1, direct_send_index, gain))
+        sender.send_message(path, [source_index + 1, direct_send_index, gain])
 
         changed = something_changed.wait()
 
@@ -517,7 +518,7 @@ def test_direct_sends():
         )
 
     logging.info("unsubscribing")
-    del listener
+    listener.shutdown()
     signal_handler()
     sleep(0.2)
 
@@ -563,7 +564,7 @@ def test_attributes():
     )
 
     # sender to send updates to osc-kreuz
-    sender = OSCClient("127.0.0.1", port_ui)
+    sender = SimpleUDPClient("127.0.0.1", port_ui)
 
     # something changed to check if the update sent to the osc-kreuz also came back
     something_changed = Event()
@@ -588,13 +589,11 @@ def test_attributes():
         source_index = random.randint(0, n_sources - 1)
         val = random.random() * 2
         if use_base_path:
-            path = base_path.format(attribute=attribute).encode()
-            args = (source_index + 1, val)
+            path = base_path.format(attribute=attribute)
+            args = [source_index + 1, val]
         else:
-            path = indexed_path.format(
-                index=source_index + 1, attribute=attribute
-            ).encode()
-            args = (val,)
+            path = indexed_path.format(index=source_index + 1, attribute=attribute)
+            args = val
         sender.send_message(path, args)
 
         changed = something_changed.wait()
@@ -607,8 +606,12 @@ def test_attributes():
         )
 
     logging.info("unsubscribing")
-    del listener
+    listener.shutdown()
     signal_handler()
     sleep(0.2)
 
     logging.info("killed osc-kreuz")
+
+
+if __name__ == "__main__":
+    test_attributes()
