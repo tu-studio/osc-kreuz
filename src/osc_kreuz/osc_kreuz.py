@@ -210,7 +210,7 @@ def main(
     extendedOscInput = True
     if verbose > 0:
         debug_prints(globalconfig, extendedOscInput, verbose)
-
+    osc.start()
     log.info("OSC router ready to use")
     log.info("have fun...")
 
@@ -218,6 +218,7 @@ def main(
     # signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGUSR1, signal_handler)
     stop_event.wait()
+    osc.shutdown()
 
 
 if __name__ == "__main__":

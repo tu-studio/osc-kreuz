@@ -89,6 +89,7 @@ class SeamlessListener:
     # TODO reinitialize if no ping for x Seconds
 
     def start_listening(self):
+        Thread(target=self.osc.serve_forever, args=(0.1,)).start()
         self.osc_dispatcher.map("/oscrouter/ping", self.pong)
         self.osc_dispatcher.map("/source/xyz", self.receive_xyz)
         self.osc_dispatcher.map("/source/send", self.receive_gain)
@@ -96,8 +97,8 @@ class SeamlessListener:
         self.osc_dispatcher.map("/source/attribute", self.receive_attribute)
         self.osc_dispatcher.set_default_handler(self.default_handler)
 
+        sleep(0.1)
         self.subscribe_to_osc_kreuz()
-        Thread(target=self.osc.serve_forever, args=(0.1,)).start()
 
     def send_full_positions(self):
         # TODO use seperate callback maybe?
