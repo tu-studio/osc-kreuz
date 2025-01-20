@@ -1,8 +1,9 @@
 from collections.abc import Iterable
 from functools import partial
 import logging
-from threading import Event, Timer
-from time import time
+import socket
+from threading import Semaphore, Timer
+from time import thread_time, time
 from typing import Any
 
 from numpy import iterable
@@ -222,7 +223,7 @@ class Renderer(object):
         self.sourceAttributes = sourceattributes
 
         self.hosts: list[tuple[str, int]] = []
-        self.receivers: list[OSCClient] = []
+        self.receivers: list[tuple[str, OSCClient]] = []
 
         # check if hosts are defined as an array
         if hostname is not None and port is not None:
@@ -234,16 +235,11 @@ class Renderer(object):
                 except KeyError:
                     raise RendererException("Invalid Host")
 
-        if len(self.hosts) == 0:
+        if len(self.receivers) == 0:
             log.warning(f"Renderer of type {self.my_type()} has no receivers")
 
         # convert update interval from ms to s
         self.update_interval = int(updateintervall) / 1000
-
-        # init update semaphore for all sources
-        self.source_getting_update: list[Event] = [
-            Event() for _ in range(self.numberOfSources)
-        ]
 
         # sets are used in update stack, so each source is updated only once during the update process
         self.update_stack: list[set[Update]] = [
@@ -252,6 +248,10 @@ class Renderer(object):
         # second update Stack that is swapped in during updates
         self.update_stack_swap: list[set[Update]] = [
             set() for _ in range(self.numberOfSources)
+        ]
+
+        self.update_semaphore: list[Semaphore] = [
+            Semaphore() for _ in range(self.numberOfSources)
         ]
 
         self.debugPrefix = "/genericRenderer"
@@ -263,7 +263,9 @@ class Renderer(object):
 
     def print_self_information(self, print_pos_format=True):
         log.info(f"Initialized renderer {self.my_type()}")
-        hosts_str = ", ".join([f"{hostname}:{port}" for hostname, port in self.hosts])
+        hosts_str = ", ".join(
+            [f"{hostname}:{receiver.port}" for hostname, receiver in self.receivers]
+        )
         log.info(f"\thosts: {hosts_str}")
         if print_pos_format:
             log.info(f"\tlistening to format {self.posFormat}")
@@ -272,10 +274,12 @@ class Renderer(object):
         return "basic Rendererclass: abstract class, doesnt listen"
 
     def add_receiver(self, hostname: str, port: int):
-        self.hosts.append((hostname, port))
-        self.receivers.append(OSCClient(hostname, port, encoding="utf8"))
+        # TODO get addr info
+        ip = socket.gethostbyname(hostname)
+        self.receivers.append((hostname, OSCClient(ip, port, encoding="utf8")))
 
     def add_update(self, source_idx: int, update: Update) -> None:
+        log.info(f"adding update for source {source_idx}")
         self.update_stack[source_idx].add(update)
         self.update_source(source_idx)
 
@@ -286,10 +290,23 @@ class Renderer(object):
             source_idx (int): index of source to be updated
         """
         # if an update is already in progress simply return
-        if self.source_getting_update[source_idx].is_set():
+        # TODO figure out if blocking or non blocking
+        if not self.update_semaphore[source_idx].acquire(
+            blocking=False
+            # timeout=2
+            # * self.update_interval
+        ):
+            # log.warning(
+            #     f"couldn't acquire semaphore for renderer {self.my_type()} with source index {source_idx}"
+            # )
             return
+
+        if len(self.update_stack[source_idx]) == 0:
+            self.update_semaphore[source_idx].release()
+            log.info("didn't need to do anything")
+            return
+
         time_start = time()
-        self.source_getting_update[source_idx].set()
 
         # swap stacks so the stack we are working on isn't written to
         self.update_stack[source_idx], self.update_stack_swap[source_idx] = (
@@ -320,20 +337,25 @@ class Renderer(object):
             msgs (list(list)): list of messages
         """
         for msg in msgs:
-            for receiver in self.receivers:
+            for i, (r_hostname, receiver) in enumerate(self.receivers):
 
                 # if explicit hostname and port are specified skip all receivers that don't match
                 if hostname is not None and port is not None:
-                    if receiver.address != hostname and receiver.port != port:
+                    if r_hostname != hostname and receiver.port != port:
                         continue
 
                 try:
-                    start_time = time()
-                    receiver.send_message(msg.path, msg.values, safer=True)
-                    send_time = (time() - start_time) * 1000
+                    t1_thread = thread_time()
+                    t1 = time()
+
+                    receiver.send_message(msg.path, msg.values)
+
+                    t2_thread = thread_time()
+                    t2 = time()
+                    send_time = (t2 - t1) * 1000
                     if send_time > 10:
                         log.warning(
-                            f"sending osc update {msg.path} to {receiver.address} took way too long: {send_time}"
+                            f"sending osc update {msg.path} to {receiver.address} took way too long: {round(send_time,2)}ms, (thread time: {round((t2_thread - t1_thread)*1000, 2)})"
                         )
                 except Exception as e:
                     log.exception(
@@ -354,9 +376,7 @@ class Renderer(object):
                 self.printOscOutput(msg.path, msg.values)
 
     def release_source_update_lock(self, source_idx):
-        self.source_getting_update[source_idx].clear()
-        if len(self.update_stack[source_idx]) > 0:
-            self.update_source(source_idx)
+        self.update_semaphore[source_idx].release()
 
     # implement these functions in subclasses for registering for specific updates
     def sourceAttributeChanged(self, source_idx, attribute):
@@ -511,7 +531,9 @@ class TWonder(Wonder):
         return "TWonder"
 
     def add_receiver(self, hostname: str, port: int):
-        if (hostname, port) not in self.hosts:
+        if (hostname, port) not in (
+            (hostname, receiver.port) for hostname, receiver in self.receivers
+        ):
             super().add_receiver(hostname, port)
 
         msgs = []
@@ -802,11 +824,13 @@ class ViewClient(SpatialRenderer):
         self.pingTimer = Timer(2.0, partial(self.checkAlive, deleteClient))
 
         if self.pingCounter < 6:
-            # self.receivers[0].send_message(b'/oscrouter/ping', [self.globalConfig['inputport_settings']])
             try:
-                self.receivers[0].send_message(
-                    b"/oscrouter/ping", [self.globalConfig[skc.inputport_settings]]
-                )  # , self.alias
+                # get first receiver tuple, get actual receiver
+                self.receivers[0][1].send_message(
+                    # TODO change ping path to constant defined somewhere else
+                    b"/oscrouter/ping",
+                    [self.globalConfig[skc.inputport_settings]],
+                )
             except Exception as e:
                 log.warning(e)
                 log.warning(f"error while pinging client { self.alias }, removing")
