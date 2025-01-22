@@ -315,15 +315,13 @@ class Renderer(object):
 
         # schedule releasing of update lock
         if (release_time := self.update_interval - (time() - time_start)) > 0:
-            log.info(release_time)
             Timer(
                 release_time,
                 self.release_source_update_lock,
                 args=(source_idx,),
             ).start()
         else:
-            log.info(f"no lock {release_time}")
-
+            # XXX is this the right place to call this from? could also be called from a thread
             self.release_source_update_lock(source_idx)
 
     def send_updates(self, msgs, hostname: str | None = None, port: int | None = None):
