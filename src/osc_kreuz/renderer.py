@@ -314,15 +314,13 @@ class Renderer(object):
         self.send_updates(msgs)
 
         # schedule releasing of update lock
-        if (release_time := self.update_interval - (time() - time_start)) > 0:
-            Timer(
-                release_time,
-                self.release_source_update_lock,
-                args=(source_idx,),
-            ).start()
-        else:
-            # XXX is this the right place to call this from? could also be called from a thread
-            self.release_source_update_lock(source_idx)
+        t = Timer(
+            self.update_interval - (time() - time_start),
+            self.release_source_update_lock,
+            args=(source_idx,),
+        )
+        t.name = f"rel_{source_idx:02}_{self.my_type()}"
+        t.start()
 
     def send_updates(self, msgs, hostname: str | None = None, port: int | None = None):
         """This function sends all messages to the osc clients
@@ -339,9 +337,11 @@ class Renderer(object):
                         continue
 
                 try:
+                    # time sending performance
                     t1_thread = thread_time()
                     t1 = time()
 
+                    # actually send
                     receiver.send_message(msg.path, msg.values)
 
                     t2_thread = thread_time()
@@ -352,9 +352,8 @@ class Renderer(object):
                             f"sending osc update {msg.path} to {receiver._address} took way too long: {round(send_time,2)}ms, (thread time: {round((t2_thread - t1_thread)*1000, 2)})"
                         )
                 except Exception as e:
-                    log.exception(
-                        f"Exception while sending to {receiver._address}:{receiver._port}",
-                        exc_info=e,
+                    log.error(
+                        f"Exception while sending to {receiver._address}:{receiver._port}: {e}",
                     )
 
                 if self.debugCopy:
@@ -696,33 +695,6 @@ class AudioMatrix(Renderer):
                     source_index=source_idx,
                 ),
             )
-
-
-# class Panoramix(SpatialRenderer):
-#     def __init__(self, **kwargs):
-#         if not "dataformat" in kwargs.keys():
-#             kwargs["dataformat"] = skc.xyz
-#         super(Panoramix, self).__init__(**kwargs)
-
-#         self.posAddrs = []
-#         for i in range(self.numberOfSources):
-#             self.posAddrs.append(("/track/" + str(i + 1) + "/xyz").encode())
-
-#         self.debugPrefix = "/dPanoramix"
-
-#     def my_type(self) -> str:
-#         return "Panoramix CAREFUL NOT REALLY IMPLEMENTED"
-
-#     def composeSourceUpdateMessage(
-#         self, values, sIdx: int = 0, *args
-#     ) -> list[tuple[bytes, Iterable]]:
-#         # msgs = []
-#         sobject = self.sources[sIdx]
-#         position = sobject.getPosition(self.posFormat)
-#         # sourceID = source_idx + 1
-#         addr = self.posAddrs[sIdx]
-
-#         return [(addr, position)]
 
 
 class SuperColliderEngine(SpatialRenderer):
