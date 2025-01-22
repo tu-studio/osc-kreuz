@@ -1,13 +1,12 @@
 from itertools import product
 import itertools
-import logging
 import math
 from pathlib import Path
 import random
-from threading import Event, Thread
+from threading import Thread
+import threading
 from time import sleep
 
-from click.testing import CliRunner
 import numpy as np
 from pythonosc.udp_client import SimpleUDPClient
 
@@ -21,9 +20,11 @@ from osc_kreuz.coordinates import (
     CoordinateSystemType,
     parse_coordinate_format,
 )
-from osc_kreuz.osc_kreuz import main, signal_handler
+import osc_kreuz.osc_kreuz
 import osc_kreuz.str_keys_conventions as skc
 from osckreuz_listener import SeamlessListener, Source
+
+import pytest
 
 test_config = Path(__file__).parent / "assets" / "config_test.yml"
 
@@ -80,32 +81,12 @@ def build_all_gain_paths():
     return paths
 
 
-def test_gains():
-    port_ui = 4456
-    port_data = 4008
-    port_settings = 4998
-    port_listen = 9876
-    # cli runner to run the actual osckreuz
-    runner = CliRunner()
-    osc_kreuz_thread = Thread(
-        target=runner.invoke,
-        args=(
-            main,
-            [
-                "-c",
-                str(test_config.absolute().resolve()),
-                "-u",
-                port_ui,
-                "-d",
-                port_data,
-                "-s",
-                port_settings,
-            ],
-        ),
-    )
-    osc_kreuz_thread.start()
-
-    sleep(0.5)
+@pytest.fixture
+def listener(request):
+    """Fixture to create an osc test listener. has to be initialized after the osc-kreuz fixture"""
+    # get ports from markers
+    port_listen = request.node.get_closest_marker("port_listen").args[0]
+    port_settings = request.node.get_closest_marker("port_settings").args[0]
 
     # listener to receive osc from osc kreuz
     listener = SeamlessListener(
@@ -115,30 +96,74 @@ def test_gains():
         "127.0.0.1",
         port_settings,
         "osckreuz_test",
+        reconnect_timeout=0.1,
     )
 
-    # sender to send updates to osc-kreuz
-    sender = SimpleUDPClient("127.0.0.1", port_ui)
-
-    # something changed to check if the update sent to the osc-kreuz also came back
-    something_changed = Event()
-
-    def osc_callback(*args):
-        something_changed.set()
-
-    # setup listener
-    listener.register_gain_callback(osc_callback)
-    listener.register_position_callback(osc_callback)
+    # setup callback that just sets the value of listener.something_changed whenever an update is recieved
+    listener.setup_default_osc_callback()
     listener.start_listening()
+    listener.is_connected.wait()
 
     # sleep to wait for initial barrage of updates
-    sleep(0.5)
+    sleep(0.2)
+    listener.something_changed.clear()
+    yield listener
+    # tear down
+    print("unsubscribing")
+    listener.shutdown()
+
+
+def osc_kreuz_runner(*args, **kwargs):
+    osc_kreuz.osc_kreuz.main(args, standalone_mode=False)
+
+
+@pytest.fixture
+def osckreuz(request):
+    port_ui = request.node.get_closest_marker("port_ui").args[0]
+    port_data = request.node.get_closest_marker("port_data").args[0]
+    port_settings = request.node.get_closest_marker("port_settings").args[0]
+
+    osc_kreuz_thread = Thread(
+        target=osc_kreuz_runner,
+        args=(
+            "-c",
+            str(test_config.absolute().resolve()),
+            "-u",
+            port_ui,
+            "-d",
+            port_data,
+            "-s",
+            port_settings,
+        ),
+        name="osckreuz_runner",
+    )
+    osc_kreuz_thread.start()
+    yield
+    osc_kreuz.osc_kreuz.signal_handler()
+    print("killed osc-kreuz")
+    print("\nthreads still running:")
+    for thread in threading.enumerate():
+        print(thread.name)
+
+
+@pytest.fixture
+def oscsender(request):
+    port_ui = request.node.get_closest_marker("port_ui").args[0]
+    sender = SimpleUDPClient("127.0.0.1", port_ui)
+    return sender
+
+
+@pytest.mark.port_ui(4456)
+@pytest.mark.port_data(4008)
+@pytest.mark.port_settings(4998)
+@pytest.mark.port_listen(9876)
+def test_gains(osckreuz, listener, oscsender):
 
     # test a lot of different paths
     for path, args, source_index, renderer, expected_val in build_all_gain_paths():
-        something_changed.clear()
-        sender.send_message(path, args)
-        val = something_changed.wait(5)
+        listener.something_changed.clear()
+        oscsender.send_message(path, args)
+        val = listener.something_changed.wait(5)
 
         assert val
         # standard epsilon is to fine grained
@@ -148,13 +173,6 @@ def test_gains():
             rel_tol=1e-06,
         )
         print(f"success for gain path {path}")
-    logging.info("unsubscribing")
-
-    listener.shutdown()
-    signal_handler()
-    sleep(0.2)
-
-    logging.info("killed osc-kreuz")
 
 
 def random_coords_for_coordinate_type(
@@ -228,60 +246,11 @@ def build_coordinate_test_path(
     return (path, args, initial_coordinate.get_all())
 
 
-def test_full_positions():
-    port_ui = 4457
-    port_data = 4009
-    port_settings = 4997
-    port_listen = 9875
-    # cli runner to run the actual osckreuz
-    runner = CliRunner()
-    osc_kreuz_thread = Thread(
-        target=runner.invoke,
-        args=(
-            main,
-            [
-                "-c",
-                str(test_config.absolute().resolve()),
-                "-u",
-                port_ui,
-                "-d",
-                port_data,
-                "-s",
-                port_settings,
-                "-v",
-            ],
-        ),
-    )
-    osc_kreuz_thread.start()
-
-    sleep(0.5)
-
-    # listener to receive osc from osc kreuz
-    listener = SeamlessListener(
-        n_sources,
-        "127.0.0.1",
-        port_listen,
-        "127.0.0.1",
-        port_settings,
-        "osckreuz_test",
-    )
-
-    # sender to send updates to osc-kreuz
-    sender = SimpleUDPClient("127.0.0.1", port_ui)
-
-    # something changed to check if the update sent to the osc-kreuz also came back
-    something_changed = Event()
-
-    def osc_callback(*args):
-        something_changed.set()
-
-    # setup listener
-    listener.register_gain_callback(osc_callback)
-    listener.register_position_callback(osc_callback)
-    listener.start_listening()
-
-    # sleep to wait for initial barrage of updates
-    sleep(0.5)
+@pytest.mark.port_ui(4457)
+@pytest.mark.port_data(4009)
+@pytest.mark.port_settings(4997)
+@pytest.mark.port_listen(9875)
+def test_full_positions(osckreuz, listener, oscsender):
 
     # test a lot of different paths
     paths = [
@@ -290,7 +259,7 @@ def test_full_positions():
     for (path, source_index_in_path), pos_format in product(
         paths, ["xyz", "aed", "aedrad"] * 500
     ):
-        something_changed.clear()
+        listener.something_changed.clear()
         source_index = random.randint(0, n_sources - 1)
 
         path, args, expected_xyz = build_coordinate_test_path(
@@ -301,8 +270,8 @@ def test_full_positions():
             listener.sources[source_index],
         )
 
-        sender.send_message(path, args)
-        val = something_changed.wait(5)
+        oscsender.send_message(path, args)
+        val = listener.something_changed.wait(5)
 
         assert val
         # standard epsilon is to fine grained
@@ -318,63 +287,12 @@ def test_full_positions():
             atol=1e-4,
         )
 
-    logging.info("unsubscribing")
-    listener.shutdown()
-    signal_handler()
-    sleep(0.2)
-    logging.info("killed osc-kreuz")
 
-
-def test_positions():
-    # cli runner to run the actual osckreuz
-    port_ui = 4460
-    port_data = 4015
-    port_settings = 4990
-    port_listen = 9870
-
-    runner = CliRunner()
-    osc_kreuz_thread = Thread(
-        target=runner.invoke,
-        args=(
-            main,
-            [
-                "-c",
-                str(test_config.absolute().resolve()),
-                "-u",
-                port_ui,
-                "-d",
-                port_data,
-                "-s",
-                port_settings,
-            ],
-        ),
-    )
-    osc_kreuz_thread.start()
-
-    sleep(0.5)
-
-    # listener to receive osc from osc kreuz
-    listener = SeamlessListener(
-        n_sources, "127.0.0.1", port_listen, "127.0.0.1", port_settings, "osckreuz_test"
-    )
-
-    # sender to send updates to osc-kreuz
-    sender = SimpleUDPClient("127.0.0.1", port_data)
-
-    # something changed to check if the update sent to the osc-kreuz also came back
-    something_changed = Event()
-
-    def osc_callback(*args):
-        something_changed.set()
-
-    # setup listener
-    listener.register_gain_callback(osc_callback)
-    listener.register_position_callback(osc_callback)
-    listener.start_listening()
-
-    # sleep to wait for initial barrage of updates
-    sleep(0.5)
-
+@pytest.mark.port_ui(4460)
+@pytest.mark.port_data(4015)
+@pytest.mark.port_settings(4990)
+@pytest.mark.port_listen(9870)
+def test_positions(osckreuz, listener, oscsender):
     source_indexes = {
         CoordinateSystemType.Cartesian: 1,
         CoordinateSystemType.Polar: 2,
@@ -394,7 +312,7 @@ def test_positions():
     for (path, source_index_in_path), pos_format in product(
         paths, osc_kreuz.coordinates.get_all_coordinate_formats() * 20
     ):
-        something_changed.clear()
+        listener.something_changed.clear()
         coordinate_system, coordinate_keys = parse_coordinate_format(pos_format)
 
         source_index = source_indexes[coordinate_system]
@@ -417,8 +335,8 @@ def test_positions():
 
         expected_xyz = coordinate.convert_to(CoordinateSystemType.Cartesian)
 
-        sender.send_message(path, osc_args)
-        val = something_changed.wait(5)
+        oscsender.send_message(path, osc_args)
+        val = listener.something_changed.wait(5)
 
         assert val
 
@@ -428,9 +346,6 @@ def test_positions():
             listener.sources[source_index].z,
         )
         # standard epsilon is too fine grained
-        print(
-            f"{pos_format} ({coordinate_system}), expected: {expected_xyz}, received: {received_xyz}"
-        )
         assert np.allclose(
             received_xyz,
             expected_xyz,
@@ -438,77 +353,23 @@ def test_positions():
             atol=1e-4,
         )
 
-    logging.info("unsubscribing")
-    listener.shutdown()
-    signal_handler()
-    sleep(0.2)
-    logging.info("killed osc-kreuz")
 
-
-def test_direct_sends():
-    port_ui = 4458
-    port_data = 4010
-    port_settings = 4995
-    port_listen = 9873
-
-    # cli runner to run the actual osckreuz
-    runner = CliRunner()
-    osc_kreuz_thread = Thread(
-        target=runner.invoke,
-        args=(
-            main,
-            [
-                "-c",
-                str(test_config.absolute().resolve()),
-                "-u",
-                port_ui,
-                "-d",
-                port_data,
-                "-s",
-                port_settings,
-            ],
-        ),
-    )
-    osc_kreuz_thread.start()
-
-    sleep(0.5)
-
-    # listener to receive osc from osc kreuz
-    listener = SeamlessListener(
-        n_sources,
-        "127.0.0.1",
-        port_listen,
-        "127.0.0.1",
-        port_settings,
-        "osckreuz_test",
-    )
-
-    # sender to send updates to osc-kreuz
-    sender = SimpleUDPClient("127.0.0.1", port_ui)
-
-    # something changed to check if the update sent to the osc-kreuz also came back
-    something_changed = Event()
-
-    def osc_callback(*args):
-        print(args)
-        something_changed.set()
-
-    # setup listener
-    listener.register_direct_send_callback(osc_callback)
-    listener.start_listening()
-
-    sleep(0.5)
+@pytest.mark.port_ui(4458)
+@pytest.mark.port_data(4010)
+@pytest.mark.port_settings(4995)
+@pytest.mark.port_listen(9873)
+def test_direct_sends(osckreuz, listener, oscsender):
     for _ in range(50):
-        something_changed.clear()
+        listener.something_changed.clear()
 
         source_index = random.randint(0, n_sources - 1)
         gain = random.random() * 2
         direct_send_index = random.randint(0, n_direct_sends - 1)
         path = "/source/send/direct"
 
-        sender.send_message(path, [source_index + 1, direct_send_index, gain])
+        oscsender.send_message(path, [source_index + 1, direct_send_index, gain])
 
-        changed = something_changed.wait()
+        changed = listener.something_changed.wait(5)
 
         assert changed
         assert math.isclose(
@@ -517,74 +378,20 @@ def test_direct_sends():
             rel_tol=1e-06,
         )
 
-    logging.info("unsubscribing")
-    listener.shutdown()
-    signal_handler()
-    sleep(0.2)
 
-    logging.info("killed osc-kreuz")
-
-
-def test_attributes():
-    port_ui = 4459
-    port_data = 4011
-    port_settings = 4993
-    port_listen = 9872
-
-    # cli runner to run the actual osckreuz
-    runner = CliRunner()
-    osc_kreuz_thread = Thread(
-        target=runner.invoke,
-        args=(
-            main,
-            [
-                "-c",
-                str(test_config.absolute().resolve()),
-                "-u",
-                port_ui,
-                "-d",
-                port_data,
-                "-s",
-                port_settings,
-            ],
-        ),
-    )
-    osc_kreuz_thread.start()
-
-    sleep(0.5)
-
-    # listener to receive osc from osc kreuz
-    listener = SeamlessListener(
-        n_sources,
-        "127.0.0.1",
-        port_listen,
-        "127.0.0.1",
-        port_settings,
-        "osckreuz_test",
-    )
-
-    # sender to send updates to osc-kreuz
-    sender = SimpleUDPClient("127.0.0.1", port_ui)
-
-    # something changed to check if the update sent to the osc-kreuz also came back
-    something_changed = Event()
-
-    def osc_callback(*args):
-        print(args)
-        something_changed.set()
-
-    # setup listener
-    listener.register_attribute_callback(osc_callback)
-    listener.start_listening()
-
-    sleep(0.5)
+@pytest.mark.port_ui(4459)
+@pytest.mark.port_data(4011)
+@pytest.mark.port_settings(4993)
+@pytest.mark.port_listen(9872)
+def test_attributes(osckreuz, listener, oscsender):
     base_path = "/source/{attribute}"
     indexed_path = "/source/{index}/{attribute}"
+
     for attribute, use_base_path in itertools.product(
         ["planewave", "doppler", "angle"], [True, False] * 20
     ):
 
-        something_changed.clear()
+        listener.something_changed.clear()
 
         source_index = random.randint(0, n_sources - 1)
         val = random.random() * 2
@@ -594,9 +401,9 @@ def test_attributes():
         else:
             path = indexed_path.format(index=source_index + 1, attribute=attribute)
             args = val
-        sender.send_message(path, args)
+        oscsender.send_message(path, args)
 
-        changed = something_changed.wait()
+        changed = listener.something_changed.wait(5)
 
         assert changed
         assert math.isclose(
@@ -604,14 +411,3 @@ def test_attributes():
             val,
             rel_tol=1e-06,
         )
-
-    logging.info("unsubscribing")
-    listener.shutdown()
-    signal_handler()
-    sleep(0.2)
-
-    logging.info("killed osc-kreuz")
-
-
-if __name__ == "__main__":
-    test_attributes()

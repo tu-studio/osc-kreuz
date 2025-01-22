@@ -213,12 +213,18 @@ def main(
     osc.start()
     log.info("OSC router ready to use")
     log.info("have fun...")
+    try:
+        signal.signal(signal.SIGTERM, signal_handler)
+        # signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGUSR1, signal_handler)
+    except ValueError:
+        log.warning("can't register signal handlers in sub threads")
 
-    signal.signal(signal.SIGTERM, signal_handler)
-    # signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGUSR1, signal_handler)
-    stop_event.wait()
-    osc.shutdown()
+    stop_event.clear()
+    try:
+        stop_event.wait()
+    finally:
+        osc.shutdown()
 
 
 if __name__ == "__main__":

@@ -32,7 +32,7 @@ class OSCComCenter:
     ) -> None:
         self.soundobjects = soundobjects
 
-        self.clientSubscriptions: dict[str, ViewClient] = {}
+        self.subscribed_clients: dict[str, ViewClient] = {}
         self.receivers = receivers
         self.extendedOscInput = True
         self.verbosity = 0
@@ -65,14 +65,25 @@ class OSCComCenter:
         self.connection_semaphore = Semaphore()
 
     def start(self):
-        Thread(target=self.osc_ui_server.serve_forever, name="osc ui").start()
-        Thread(target=self.osc_data_server.serve_forever, name="osc data").start()
-        Thread(target=self.osc_setting_server.serve_forever, name="osc setting").start()
+        Thread(
+            target=self.osc_ui_server.serve_forever, args=(0.1,), name="osc ui"
+        ).start()
+        Thread(
+            target=self.osc_data_server.serve_forever, args=(0.1,), name="osc data"
+        ).start()
+        Thread(
+            target=self.osc_setting_server.serve_forever,
+            args=(0.1,),
+            name="osc setting",
+        ).start()
 
     def shutdown(self):
         self.osc_ui_server.shutdown()
         self.osc_data_server.shutdown()
         self.osc_setting_server.shutdown()
+        for c in self.subscribed_clients.values():
+            if c.pingTimer is not None:
+                c.pingTimer.cancel()
 
     def setVerbosity(self, v: int):
         self.verbosity = v
@@ -117,7 +128,7 @@ class OSCComCenter:
 
         try:
             clientName = args[0]
-            self.clientSubscriptions[clientName].receivedIsAlive()
+            self.subscribed_clients[clientName].receivedIsAlive()
         except Exception:
             if self.verbosity > 0:
                 _name = ""
@@ -137,39 +148,47 @@ class OSCComCenter:
         args[3] send source index as value instead of inside the osc prefix
         args[4] source position update rate
         """
-        viewClientInitValues = {}
-        vCName = args[0]
-        subArgs = len(args)
-        if subArgs >= 2:
+        client_init_dict = {}
+        client_name = args[0]
+        if len(args) >= 2:
             if self.checkPort(args[1]):
-                viewClientInitValues["port"] = args[1]
+                client_init_dict["port"] = int(args[1])
                 client_infos = self.osc_setting_server.get_request()[1]
-                _ip = client_infos[0]
 
-                viewClientInitValues["hostname"] = _ip
+                client_init_dict["hostname"] = str(client_infos[0])
 
-                # if subArgs>2:
-                #     initKeys = ['dataformat', 'indexAsValue', 'updateintervall']
-                #     for i in range(2, subArgs):
-                #         viewClientInitValues[initKeys[i-2]] = args[i]
                 try:
-                    viewClientInitValues["dataformat"] = args[2]
+                    client_init_dict["dataformat"] = args[2]
                 except KeyError:
                     pass
                 try:
-                    viewClientInitValues["indexAsValue"] = args[3]
+                    client_init_dict["indexAsValue"] = args[3]
                 except KeyError:
                     pass
                 try:
-                    viewClientInitValues["updateintervall"] = args[4]
+                    client_init_dict["updateintervall"] = args[4]
                 except KeyError:
                     pass
-            newViewClient = ViewClient(vCName, **viewClientInitValues)
+            # make sure clients that try to connect rapidly don't accidentally overwrite themselves
+            with self.connection_semaphore:
+                # check if this client is already connected
+                if client_name in self.subscribed_clients:
+                    if (
+                        self.subscribed_clients[client_name].receivers[0][0]
+                        == client_init_dict["hostname"]
+                        and self.subscribed_clients[client_name].receivers[0][1]._port
+                        == client_init_dict["port"]
+                    ):
+                        log.info(f"client {client_name} tried to reconnect")
+                        return
+                    else:
+                        log.warning(f"client {client_name} exists already")
+                        return
+                newViewClient = ViewClient(client_name, **client_init_dict)
 
-            self.clientSubscriptions[vCName] = newViewClient
-            # TODO check if this is threadsafe (it probably isn't)
-            self.receivers.append(newViewClient)
-            newViewClient.checkAlive(self.deleteClient)
+                self.subscribed_clients[client_name] = newViewClient
+                self.receivers.append(newViewClient)
+                newViewClient.checkAlive(self.deleteClient)
 
         else:
             if self.verbosity > 0:
@@ -227,7 +246,7 @@ class OSCComCenter:
         if len(args) >= 1:
             client_name = args[0]
             try:
-                view_client = self.clientSubscriptions[client_name]
+                view_client = self.subscribed_clients[client_name]
                 self.deleteClient(view_client, client_name)
 
             except KeyError:
@@ -246,7 +265,7 @@ class OSCComCenter:
             log.info(f"deleting client {viewC}, {alias}")
         try:
             self.receivers.remove(viewC)
-            del self.clientSubscriptions[alias]
+            del self.subscribed_clients[alias]
             log.info(f"removed client {alias}")
         except (ValueError, KeyError):
             log.warning(f"tried to delete receiver {alias}, but it does not exist")

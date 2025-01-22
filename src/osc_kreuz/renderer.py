@@ -1,5 +1,4 @@
 from collections.abc import Iterable
-from functools import partial
 import logging
 import socket
 from threading import Semaphore, Timer
@@ -275,7 +274,6 @@ class Renderer(object):
         return "basic Rendererclass: abstract class, doesnt listen"
 
     def add_receiver(self, hostname: str, port: int):
-        # TODO get addr info
         ip = socket.gethostbyname(hostname)
         self.receivers.append((hostname, SimpleUDPClient(ip, port)))
 
@@ -290,15 +288,7 @@ class Renderer(object):
             source_idx (int): index of source to be updated
         """
         # if an update is already in progress simply return
-        # TODO figure out if blocking or non blocking
-        if not self.update_semaphore[source_idx].acquire(
-            blocking=False
-            # timeout=2
-            # * self.update_interval
-        ):
-            # log.warning(
-            #     f"couldn't acquire semaphore for renderer {self.my_type()} with source index {source_idx}"
-            # )
+        if not self.update_semaphore[source_idx].acquire(blocking=False):
             return
 
         if len(self.update_stack[source_idx]) == 0:
@@ -324,11 +314,17 @@ class Renderer(object):
         self.send_updates(msgs)
 
         # schedule releasing of update lock
-        Timer(
-            self.update_interval - (time() - time_start),
-            self.release_source_update_lock,
-            args=(source_idx,),
-        ).start()
+        if (release_time := self.update_interval - (time() - time_start)) > 0:
+            log.info(release_time)
+            Timer(
+                release_time,
+                self.release_source_update_lock,
+                args=(source_idx,),
+            ).start()
+        else:
+            log.info(f"no lock {release_time}")
+
+            self.release_source_update_lock(source_idx)
 
     def send_updates(self, msgs, hostname: str | None = None, port: int | None = None):
         """This function sends all messages to the osc clients
@@ -816,7 +812,8 @@ class ViewClient(SpatialRenderer):
             self.idxSourceOscPreRender[i] = renderList
 
     def checkAlive(self, deleteClient):
-        self.pingTimer = Timer(2.0, partial(self.checkAlive, deleteClient))
+        self.pingTimer = Timer(2.0, self.checkAlive, args=(deleteClient,))
+        self.pingTimer.name = f"pingtimer {self.alias}"
 
         if self.pingCounter < 6:
             try:
