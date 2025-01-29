@@ -216,8 +216,8 @@ class OSCComCenter:
             log.warning(f"Invalid twonder connection request by {name}")
             return
 
-        # get twonder from receivers list if it already exists
         with self.connection_semaphore:
+            # get twonder from receivers list if it already exists
             twonder = next(
                 (
                     receiver

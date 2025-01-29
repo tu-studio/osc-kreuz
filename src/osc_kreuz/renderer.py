@@ -9,7 +9,7 @@ from numpy import iterable
 
 from pythonosc.udp_client import SimpleUDPClient
 
-from osc_kreuz.config import read_config_option
+from osc_kreuz.config import add_renderer_to_state_file, read_config_option
 from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc
 
@@ -528,6 +528,7 @@ class TWonder(Wonder):
             (hostname, receiver._port) for hostname, receiver in self.receivers
         ):
             super().add_receiver(hostname, port)
+            add_renderer_to_state_file("twonder", hostname, port)
 
         msgs = []
         msgs.append(Message(self.oscpath_n_sources, self.numberOfSources))
@@ -1033,6 +1034,7 @@ class DataClient(Audiorouter, SpatialRenderer):
 
 renderer_name_dict = {
     "wonder": Wonder,
+    "twonder": TWonder,
     # "panoramix": Panoramix,
     "viewclient": ViewClient,
     # "oscar": Oscar,

@@ -3,7 +3,7 @@ from importlib.resources import files
 import logging
 from pathlib import Path
 from typing import TypeVar
-
+import os
 import yaml
 
 import osc_kreuz.str_keys_conventions as skc
@@ -11,8 +11,16 @@ import osc_kreuz.str_keys_conventions as skc
 
 log = logging.getLogger()
 
+default_config_file_folder = Path("osc-kreuz")
+
+
+xdg_config_home = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+state_directory = (
+    Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state")
+    / default_config_file_folder
+)
+
 # lists for constructing default config paths
-default_config_file_path = Path("osc-kreuz")
 default_config_file_name_options = [
     "osc-kreuz_conf.yml",
     "osc-kreuz-conf.yml",
@@ -22,7 +30,7 @@ default_config_file_name_options = [
     "conf.yml",
 ]
 default_config_file_locations = [
-    Path.home() / ".config",
+    xdg_config_home,
     Path("/etc"),
     Path("/usr/local/etc"),
 ]
@@ -57,7 +65,7 @@ def read_config(config_path: str | Path | None) -> dict:
     if config_path is None:
         # check different paths for a config file, with the highest one taking precedence
         for possible_config_path in (
-            base / default_config_file_path / filename
+            base / default_config_file_folder / filename
             for base in default_config_file_locations
             for filename in default_config_file_name_options
         ):
@@ -119,3 +127,37 @@ def read_config_option(
     except Exception:
         log.error(f"Could not read config option {option_name}, invalid type")
     return config[option_name]
+
+
+state_suffix = "_state"
+
+
+def add_renderer_to_state_file(renderer: str, hostname: str, port: int):
+    if not state_directory.exists():
+        state_directory.mkdir()
+    with open(state_directory / f"{renderer}{state_suffix}.csv", "a") as f:
+        f.write(f"{hostname};{port}\n")
+
+
+def read_renderer_state_file(renderer: str) -> list[dict]:
+    receivers = []
+    filename = state_directory / f"{renderer}{state_suffix}.csv"
+    if not filename.exists():
+        return receivers
+    try:
+        with open(filename, "r") as f:
+            for line in f:
+                hostname, port = line.strip("\n").split(";")
+                receivers.append({"hostname": hostname, "port": int(port)})
+    except Exception as e:
+        log.warning(f"exception while reading {renderer} state file: {e}")
+
+    return receivers
+
+
+def get_renderers_with_state_file() -> list[str]:
+    renderers = []
+
+    for filename in state_directory.glob(f"*{state_suffix}.csv"):
+        renderers.append(filename.stem[: -len(state_suffix)])
+    return renderers
