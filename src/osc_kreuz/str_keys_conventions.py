@@ -47,7 +47,7 @@ osc_paths = {
 }
 
 osc_aliases = {
-    "ambi": ["ambi", "ambisonics"],
+    "ambi": ["hoa", "ambi", "ambisonics"],
     "wfs": ["wfs", "wavefieldsynthesis"],
     "reverb": ["reverb", "rev"],
 }

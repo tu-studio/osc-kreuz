@@ -1,11 +1,13 @@
 from dataclasses import dataclass, field
 import logging
-import signal
-from threading import Timer
+from threading import Event, Thread, Timer
+from time import sleep
 from types import NoneType
 from typing import Callable, List
 
-from oscpy.server import OSCThreadServer, ServerClass
+from pythonosc.dispatcher import Dispatcher
+from pythonosc.osc_server import BlockingOSCUDPServer
+from pythonosc.udp_client import SimpleUDPClient
 
 log = logging.getLogger()
 
@@ -39,8 +41,10 @@ class Watchdog(Exception):
         self.timer = Timer(self.timeout, self.handler)
         self.timer.start()
 
-    def reset(self):
+    def reset(self, new_timeout: float | None = None):
         self.timer.cancel()
+        if new_timeout:
+            self.timeout = new_timeout
         self.timer = Timer(self.timeout, self.handler)
         self.timer.start()
 
@@ -51,7 +55,6 @@ class Watchdog(Exception):
         raise self
 
 
-@ServerClass
 class SeamlessListener:
     def __init__(
         self,
@@ -61,17 +64,23 @@ class SeamlessListener:
         osc_kreuz_hostname,
         osc_kreuz_port,
         name="seamless_status",
-        reconnect_timeout=5,
+        reconnect_timeout: float = 5,
     ) -> None:
         self.name = name
         self.listen_ip = listen_ip
         self.listen_port = listen_port
         self.osc_kreuz_hostname = osc_kreuz_hostname
         self.osc_kreuz_port = osc_kreuz_port
-
+        self.is_connected = Event()
         self.sources = [Source(idx=i) for i in range(n_sources)]
-        self.osc = OSCThreadServer()
+
+        self.osc_dispatcher = Dispatcher()
+        self.osc = BlockingOSCUDPServer((listen_ip, listen_port), self.osc_dispatcher)
+        self.osc_client = SimpleUDPClient(osc_kreuz_hostname, osc_kreuz_port)
+
         self.reconnect_timer = Watchdog(reconnect_timeout, self.subscribe_to_osc_kreuz)
+
+        self.osc_thread: None | Thread = None
 
         self.position_callback: (
             NoneType | Callable[[int, float, float, float], None]
@@ -80,15 +89,31 @@ class SeamlessListener:
         self.attribute_callback: NoneType | Callable[[int, str, float], None] = None
         self.direct_send_callback: NoneType | Callable[[int, int, float], None] = None
 
+        # needed for default callback to notify of changes
+        self.something_changed = Event()
+
     # TODO reinitialize if no ping for x Seconds
 
+    def setup_default_osc_callback(self):
+        self.register_gain_callback(self.default_osc_callback)
+        self.register_position_callback(self.default_osc_callback)
+        self.register_attribute_callback(self.default_osc_callback)
+        self.register_direct_send_callback(self.default_osc_callback)
+
+    def default_osc_callback(self, *args):
+        self.something_changed.set()
+
     def start_listening(self):
-        self.osc.listen(self.listen_ip, self.listen_port, True)
-        self.osc.bind(b"/oscrouter/ping", self.pong)
-        self.osc.bind(b"/source/xyz", self.receive_xyz)
-        self.osc.bind(b"/source/send", self.receive_gain)
-        self.osc.bind(b"/source/direct", self.receive_direct_send_gain)
-        self.osc.bind(b"/source/attribute", self.receive_attribute)
+        self.osc_thread = Thread(
+            target=self.osc.serve_forever, args=(0.1,), name="osckreuz_listener"
+        )
+        self.osc_thread.start()
+        self.osc_dispatcher.map("/oscrouter/ping", self.pong)
+        self.osc_dispatcher.map("/source/xyz", self.receive_xyz)
+        self.osc_dispatcher.map("/source/send", self.receive_gain)
+        self.osc_dispatcher.map("/source/direct", self.receive_direct_send_gain)
+        self.osc_dispatcher.map("/source/attribute", self.receive_attribute)
+        self.osc_dispatcher.set_default_handler(self.default_handler)
 
         self.subscribe_to_osc_kreuz()
 
@@ -97,6 +122,9 @@ class SeamlessListener:
         for source in self.sources:
             if self.position_callback is not None:
                 _ = self.position_callback(source.idx, source.x, source.y, source.z)
+
+    def default_handler(self, address, *args):
+        log.warning(f"received on default handler {address}: {args}")
 
     def register_position_callback(
         self, callback: Callable[[int, float, float, float], None]
@@ -115,16 +143,12 @@ class SeamlessListener:
         self.attribute_callback = callback
 
     def pong(self, *values):
-        log.info("listener received ping")
-        self.reconnect_timer.reset()
-        self.osc.send_message(
-            b"/oscrouter/pong",
-            (self.name.encode(),),
-            self.osc_kreuz_hostname,
-            self.osc_kreuz_port,
-        )
+        print("listener received ping")
+        self.is_connected.set()
+        self.reconnect_timer.reset(3)
+        self.osc_client.send_message("/oscrouter/pong", self.name)
 
-    def receive_xyz(self, *values):
+    def receive_xyz(self, address: str, *values):
         if len(values) != 4:
             return
 
@@ -137,8 +161,9 @@ class SeamlessListener:
         if self.position_callback is not None:
             self.position_callback(source_id, x, y, z)
 
-    def receive_gain(self, *values):
+    def receive_gain(self, address: str, *values):
         if len(values) != 3:
+            log.warning(f"received gain update with invalid values: {values}")
             return
         source_id = int(values[0])
         renderer_id = int(values[1])
@@ -148,23 +173,24 @@ class SeamlessListener:
         if self.gain_callback is not None:
             self.gain_callback(source_id, renderer_id, gain)
 
-    def receive_direct_send_gain(self, *values):
+    def receive_direct_send_gain(self, address: str, *values):
         if len(values) != 3:
             return
         source_id = int(values[0])
         direct_send_id = int(values[1])
         gain = float(values[2])
+
         self.sources[source_id].direct_sends[direct_send_id] = gain
-        print(self.sources[source_id].direct_sends)
+        log.info(self.sources[source_id].direct_sends)
         if self.direct_send_callback is not None:
             self.direct_send_callback(source_id, direct_send_id, gain)
 
-    def receive_attribute(self, *values):
+    def receive_attribute(self, address: str, *values):
         if len(values) != 3:
             return
 
         source_id = int(values[0])
-        attr = bytes(values[1]).decode()
+        attr = str(values[1])
         val = float(values[2])
         self.sources[source_id].attributes[attr] = val
 
@@ -172,43 +198,42 @@ class SeamlessListener:
             self.attribute_callback(source_id, attr, val)
 
     def subscribe_to_osc_kreuz(self):
-        logging.info(
-            f"sending subscribe message to {self.osc_kreuz_hostname}:{self.osc_kreuz_port}"
-        )
         print(
             f"sending subscribe message to {self.osc_kreuz_hostname}:{self.osc_kreuz_port}"
         )
-        self.osc.send_message(
-            "/oscrouter/subscribe".encode(),
-            [self.name.encode(), self.listen_port, b"xyz", 0, 1],
-            self.osc_kreuz_hostname,
-            self.osc_kreuz_port,
+        self.osc_client.send_message(
+            "/oscrouter/subscribe",
+            [self.name, self.listen_port, "xyz", 0, 0],
         )
         self.reconnect_timer.start()
 
     def unsubscribe_from_osc_kreuz(self):
+
         try:
-            self.osc.send_message(
-                b"/oscrouter/unsubscribe",
-                [self.name.encode()],
-                self.osc_kreuz_hostname,
-                self.osc_kreuz_port,
+            self.osc_client.send_message(
+                "/oscrouter/unsubscribe",
+                self.name,
             )
 
             self.reconnect_timer.stop()
-            self.osc.close()
 
         except (RuntimeError, AttributeError):
             # handle shutdowns in dev mode of fastapi
+            log.exception("exception while unsubscribing")
             pass
 
-    def __del__(self):
+    def shutdown(self):
+        if self.osc_thread is not None and self.osc_thread.is_alive():
+            self.osc.shutdown()
         self.unsubscribe_from_osc_kreuz()
+
+    def __del__(self):
+        self.shutdown()
 
 
 if __name__ == "__main__":
     # register with osc_kreuz
-    osc_kreuz_ip = "130.149.23.211"
+    osc_kreuz_ip = "127.0.0.1"
     osc_kreuz_port = 4999
     name = "seamless_status"
 
@@ -217,5 +242,7 @@ if __name__ == "__main__":
     ip = "0.0.0.0"
     port = 51213
 
-    SeamlessListener(n_sources, ip, port, osc_kreuz_ip, osc_kreuz_port, name)
-    signal.pause()
+    s = SeamlessListener(n_sources, ip, port, osc_kreuz_ip, osc_kreuz_port, name)
+    s.start_listening()
+    sleep(2.5)
+    s.shutdown()

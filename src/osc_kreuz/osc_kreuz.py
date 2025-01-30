@@ -9,10 +9,15 @@ from typing import Any
 
 import click
 
-from osc_kreuz.config import ConfigError, read_config, read_config_option
+from osc_kreuz.config import (
+    ConfigError,
+    get_renderers_with_state_file,
+    read_config,
+    read_config_option,
+    read_renderer_state_file,
+)
 import osc_kreuz.osccomcenter as osccomcenter
-from osc_kreuz.renderer import Renderer
-import osc_kreuz.renderer as rendererclass
+from osc_kreuz.renderer import Renderer, RendererException, createRendererClient
 from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc
 
@@ -178,7 +183,7 @@ def main(
 
     receivers: list[Renderer] = []
 
-    # creating audiorouters
+    # setting up receivers from config file
     log.info("setting up receivers")
     if "receivers" in config and isinstance(config["receivers"], list):
         for receiver_config in config["receivers"]:
@@ -186,10 +191,24 @@ def main(
                 log.warning("receiver has no type specified, skipping")
                 continue
             try:
-                receivers.append(rendererclass.createRendererClient(receiver_config))
-            except rendererclass.RendererException as e:
+                receivers.append(createRendererClient(receiver_config))
+            except RendererException as e:
                 log.error(e)
                 sys.exit(-1)
+
+    # setting up receivers from state file
+    for renderer in get_renderers_with_state_file():
+        log.info(f"setting up renderer {renderer} from last run")
+        receiver_config = {
+            "type": renderer,
+            "hosts": read_renderer_state_file(renderer),
+            "updateintervall": 50,  # TODO find a better way to set this default
+        }
+        try:
+            receivers.append(createRendererClient(receiver_config))
+        except RendererException as e:
+            log.error(e)
+            sys.exit(-1)
 
     # Setup OSC Com center
     osc = osccomcenter.OSCComCenter(
@@ -210,14 +229,21 @@ def main(
     extendedOscInput = True
     if verbose > 0:
         debug_prints(globalconfig, extendedOscInput, verbose)
-
+    osc.start()
     log.info("OSC router ready to use")
     log.info("have fun...")
+    try:
+        signal.signal(signal.SIGTERM, signal_handler)
+        # signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGUSR1, signal_handler)
+    except ValueError:
+        log.warning("can't register signal handlers in sub threads")
 
-    signal.signal(signal.SIGTERM, signal_handler)
-    # signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGUSR1, signal_handler)
-    stop_event.wait()
+    stop_event.clear()
+    try:
+        stop_event.wait()
+    finally:
+        osc.shutdown()
 
 
 if __name__ == "__main__":
