@@ -18,7 +18,6 @@ from osc_kreuz.config import (
 )
 import osc_kreuz.osccomcenter as osccomcenter
 from osc_kreuz.renderer import Renderer, RendererException, createRendererClient
-from osc_kreuz.renderer import createRendererClient, RendererException
 from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc
 
