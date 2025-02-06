@@ -275,7 +275,7 @@ class BaseRenderer(object):
 
         # get ip from hostname to prevent repeated dns lookups
         ip = None
-        n_retries = 5
+        n_retries = 120
         while ip is None:
             try:
                 ip = socket.gethostbyname(hostname)
@@ -291,8 +291,13 @@ class BaseRenderer(object):
                         f"getting ip for receiver {hostname}:{port} failed: {e}, retrying..."
                     )
                     n_retries -= 1
-                    sleep(0.5)
-        self.receivers.append((hostname, SimpleUDPClient(ip, port)))
+                    sleep(1)
+        try:
+            self.receivers.append((hostname, SimpleUDPClient(ip, port)))
+        except socket.gaierror as e:
+            log.error(
+                f"failed to connect to receiver {hostname}:{port} for renderer {self.my_type()}: {e}"
+            )
 
     def add_update(self, source_idx: int, update: Update) -> None:
         self.update_stack[source_idx].add(update)
