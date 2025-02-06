@@ -538,9 +538,14 @@ class TWonder(Wonder):
             room_name = read_config_option(
                 self.globalConfig, "room_name", str, "default_room"
             )
+
             room_polygon = read_config_option(
                 self.globalConfig, "room_polygon", list, []
             )
+            if len(room_polygon) == 0:
+                raise RendererException(
+                    f"Can't connect twonder because no room_polygon was specified in config"
+                )
             args = [room_name, len(room_polygon)]
             for point in room_polygon:
                 if len(point) != 3:
