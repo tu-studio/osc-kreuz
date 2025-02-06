@@ -2,7 +2,7 @@ from collections.abc import Iterable
 import logging
 import socket
 from threading import Semaphore, Timer
-from time import thread_time, time
+from time import sleep, thread_time, time
 from typing import Any
 
 from numpy import iterable
@@ -274,7 +274,26 @@ class Renderer(object):
         return "basic Rendererclass: abstract class, doesnt listen"
 
     def add_receiver(self, hostname: str, port: int):
-        ip = socket.gethostbyname(hostname)
+
+        # get ip from hostname to prevent repeated dns lookups
+        ip = None
+        n_retries = 5
+        while ip is None:
+            try:
+                ip = socket.gethostbyname(hostname)
+            except socket.gaierror as e:
+                if n_retries <= 0:
+                    log.warning(
+                        f"failed to add receiver {hostname}:{port}, using hostname instead"
+                    )
+                    ip = hostname
+
+                else:
+                    log.warning(
+                        f"getting ip for receiver {hostname}:{port} failed: {e}, retrying..."
+                    )
+                    n_retries -= 1
+                    sleep(0.5)
         self.receivers.append((hostname, SimpleUDPClient(ip, port)))
 
     def add_update(self, source_idx: int, update: Update) -> None:
