@@ -135,8 +135,15 @@ state_suffix = "_state"
 def add_renderer_to_state_file(renderer: str, hostname: str, port: int):
     if not state_directory.exists():
         state_directory.mkdir()
-    with open(state_directory / f"{renderer}{state_suffix}.csv", "a") as f:
-        f.write(f"{hostname};{port}\n")
+
+    renderer_str = f"{hostname};{port}\n"
+    with open(state_directory / f"{renderer}{state_suffix}.csv", "a+") as f:
+        f.seek(0)
+        for line in f:
+            if line == renderer_str:
+                break
+        else:
+            f.write(renderer_str)
 
 
 def read_renderer_state_file(renderer: str) -> list[dict]:
