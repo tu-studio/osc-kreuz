@@ -292,6 +292,8 @@ class BaseRenderer(object):
                     )
                     n_retries -= 1
                     sleep(1)
+
+        # TODO implement retrying here
         try:
             self.receivers.append((hostname, SimpleUDPClient(ip, port)))
         except socket.gaierror as e:
@@ -458,7 +460,7 @@ class Wonder(SpatialRenderer):
             )
         if "updateintervall" not in kwargs:
             kwargs["updateintervall"] = 50
-        self.interpolTime = kwargs["updateintervall"]
+        self.interpolTime = int(kwargs["updateintervall"]) / 1000
         self.linkPositionAndAngle = True
 
         super(Wonder, self).__init__(**kwargs)
