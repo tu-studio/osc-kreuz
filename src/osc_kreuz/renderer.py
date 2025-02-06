@@ -384,6 +384,23 @@ class Renderer(object):
     def sourcePositionChanged(self, source_idx):
         pass
 
+    def dump_source_positions(self):
+        # TODO make receiver specifyable by hostname/port so it doesn't have to get sent out for all receivers multi-receiver renderers like twonder
+        for i in range(
+            read_config_option(self.globalConfig, "number_sources", int, 64)
+        ):
+            self.sourcePositionChanged(i)
+
+    def dump_source_gains(self):
+        # TODO make receiver specifyable by hostname/port so it doesn't have to get sent out for all receivers multi-receiver renderers like twonder
+        for i in range(
+            read_config_option(self.globalConfig, "number_sources", int, 64)
+        ):
+            for j in range(
+                read_config_option(self.globalConfig, "n_renderengines", int, 3)
+            ):
+                self.sourceRenderGainChanged(i, j)
+
     def oscDebugSend(self, oscStr: str, data: list):
         decStr = oscStr
         newOscAddr = self.debugPrefix + decStr
@@ -524,44 +541,64 @@ class TWonder(Wonder):
         return "TWonder"
 
     def add_receiver(self, hostname: str, port: int):
+
+        # check that osc-kreuz is ready to function as cwonder replacement
+        if "room_polygon" not in self.globalConfig:
+            raise RendererException(
+                "Can't connect twonder because no room_polygon was specified in config"
+            )
+
+        # make sure every twonder is only added once
         if (hostname, port) not in (
             (hostname, receiver._port) for hostname, receiver in self.receivers
         ):
             super().add_receiver(hostname, port)
             add_renderer_to_state_file("twonder", hostname, port)
 
+        # send current state to twonder
+        self.send_room_information(hostname, port)
+        self.dump_source_positions()
+
+    def send_room_information(self, hostname: str, port: int):
+        """send status information for renderer to twonder
+
+        Args:
+            hostname (str): hostname of the receiving twonder
+            port (int): port of the receiving twonder
+        """
         msgs = []
+
+        # send number of sources
         msgs.append(Message(self.oscpath_n_sources, self.numberOfSources))
 
-        # TODO do this somewhere better
-        if "room_polygon" in self.globalConfig:
-            room_name = read_config_option(
-                self.globalConfig, "room_name", str, "default_room"
-            )
+        # send information about room
+        room_name = read_config_option(
+            self.globalConfig, "room_name", str, "default_room"
+        )
 
-            room_polygon = read_config_option(
-                self.globalConfig, "room_polygon", list, []
-            )
-            if len(room_polygon) == 0:
-                raise RendererException(
-                    f"Can't connect twonder because no room_polygon was specified in config"
-                )
-            args = [room_name, len(room_polygon)]
-            for point in room_polygon:
-                if len(point) != 3:
-                    raise RendererException(f"Invalid polygon point: {point}")
-                for p in point:
-                    if not isinstance(p, float):
-                        raise RendererException(
-                            f"Invalid type for coordinate {p} of polygon"
-                        )
+        # read room polygon
+        room_polygon = read_config_option(self.globalConfig, "room_polygon", list, [])
+        if len(room_polygon) == 0:
+            raise RendererException("room_polygon has length of 0")
 
-                args.extend(point)
-            msgs.append(Message(self.oscpath_room_polygon, args))
+        # args for this osc-path are [room_name, n_points_polygon, point_0_x, point_0_y, point_0_z, point_1_x...]
+        args = [room_name, len(room_polygon)]
+        for point in room_polygon:
+            if len(point) != 3:
+                raise RendererException(f"Invalid polygon point: {point}")
+            for p in point:
+                if not isinstance(p, float):
+                    raise RendererException(
+                        f"Invalid type for coordinate {p} of polygon"
+                    )
 
+            args.extend(point)
+        msgs.append(Message(self.oscpath_room_polygon, args))
+
+        # send activation information
         for i in range(self.numberOfSources):
             msgs.append(Message(self.oscpath_activate_source, i))
-        self.send_updates(msgs)
+        self.send_updates(msgs, hostname, port)
 
 
 class Audiorouter(Renderer):
@@ -750,10 +787,8 @@ class ViewClient(SpatialRenderer):
         self.pingTimer: Timer | None = None
 
         # send current state to viewclient
-        for i in range(self.globalConfig["number_sources"]):
-            self.sourcePositionChanged(i)
-            for j in range(self.globalConfig["n_renderengines"]):
-                self.sourceRenderGainChanged(i, j)
+        self.dump_source_positions()
+        self.dump_source_gains()
 
     def createOscPrefixes(self):
         for i in range(self.numberOfSources):

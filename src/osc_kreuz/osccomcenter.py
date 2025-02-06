@@ -9,7 +9,7 @@ from pythonosc.dispatcher import Dispatcher
 from pythonosc.osc_server import BlockingOSCUDPServer
 
 from osc_kreuz.coordinates import get_all_coordinate_formats
-from osc_kreuz.renderer import Renderer, TWonder, ViewClient
+from osc_kreuz.renderer import Renderer, RendererException, TWonder, ViewClient
 from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc
 
@@ -230,7 +230,12 @@ class OSCComCenter:
                 twonder.add_receiver(hostname, port)
                 log.info(f"new twonder {name} connected to receiver")
             else:
-                receiver = TWonder(hostname=hostname, port=port, updateintervall=50)
+                try:
+                    receiver = TWonder(hostname=hostname, port=port, updateintervall=50)
+                except RendererException as e:
+                    log.error(e)
+                    return
+
                 self.receivers.append(receiver)
                 log.info(f"twonder {name} connected")
 

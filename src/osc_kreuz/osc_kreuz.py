@@ -207,8 +207,8 @@ def main(
         try:
             receivers.append(createRendererClient(receiver_config))
         except RendererException as e:
+            log.error(f"Can't create renderer {renderer} from state file:")
             log.error(e)
-            sys.exit(-1)
 
     # Setup OSC Com center
     osc = osccomcenter.OSCComCenter(
