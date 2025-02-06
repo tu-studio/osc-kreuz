@@ -2,23 +2,26 @@ from collections.abc import Callable
 from functools import partial
 import ipaddress
 import logging
+from threading import Semaphore, Thread
 from typing import Any
 
-from oscpy.server import OSCThreadServer
+from pythonosc.dispatcher import Dispatcher
+from pythonosc.osc_server import BlockingOSCUDPServer
 
 from osc_kreuz.coordinates import get_all_coordinate_formats
-from osc_kreuz.renderer import Renderer, ViewClient
+from osc_kreuz.renderer import BaseRenderer, RendererException, TWonder, ViewClient
 from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc
 
 log = logging.getLogger("OSCcomcenter")
+# log.setLevel(logging.DEBUG)
 
 
 class OSCComCenter:
     def __init__(
         self,
         soundobjects: list[SoundObject],
-        receivers: list[Renderer],
+        receivers: list[BaseRenderer],
         renderengines: list[str],
         n_sources: int,
         n_direct_sends: int,
@@ -29,7 +32,7 @@ class OSCComCenter:
     ) -> None:
         self.soundobjects = soundobjects
 
-        self.clientSubscriptions: dict[str, ViewClient] = {}
+        self.subscribed_clients: dict[str, ViewClient] = {}
         self.receivers = receivers
         self.extendedOscInput = True
         self.verbosity = 0
@@ -40,62 +43,92 @@ class OSCComCenter:
         self.n_sources = n_sources
         self.n_direct_sends = n_direct_sends
 
-        self.osc_ui_server = OSCThreadServer()
-        self.osc_data_server = OSCThreadServer()
-        self.osc_setting_server = OSCThreadServer()
+        self.osc_ui_dispatcher = Dispatcher()
+        self.osc_data_dispatcher = Dispatcher()
+        self.osc_setting_dispatcher = Dispatcher()
 
         self.ip = ip
         self.port_ui = port_ui
         self.port_data = port_data
         self.port_settings = port_settings
 
+        self.osc_ui_server = BlockingOSCUDPServer(
+            (self.ip, self.port_ui), self.osc_ui_dispatcher
+        )
+        self.osc_data_server = BlockingOSCUDPServer(
+            (self.ip, self.port_data), self.osc_data_dispatcher
+        )
+        self.osc_setting_server = BlockingOSCUDPServer(
+            (self.ip, self.port_settings), self.osc_setting_dispatcher
+        )
+
+        self.connection_semaphore = Semaphore()
+
+    def start(self):
+        Thread(
+            target=self.osc_ui_server.serve_forever, args=(0.1,), name="osc ui"
+        ).start()
+        Thread(
+            target=self.osc_data_server.serve_forever, args=(0.1,), name="osc data"
+        ).start()
+        Thread(
+            target=self.osc_setting_server.serve_forever,
+            args=(0.1,),
+            name="osc setting",
+        ).start()
+
+    def shutdown(self):
+        self.osc_ui_server.shutdown()
+        self.osc_data_server.shutdown()
+        self.osc_setting_server.shutdown()
+        for c in self.subscribed_clients.values():
+            if c.pingTimer is not None:
+                c.pingTimer.cancel()
+
     def setVerbosity(self, v: int):
         self.verbosity = v
         self.bPrintOSC = v >= 2
-        Renderer.setVerbosity(v)
-        log.debug("verbosity set to", v)
+        BaseRenderer.setVerbosity(v)
+        log.debug(f"verbosity set to {v}")
 
     def setupOscSettingsBindings(self):
-        self.osc_setting_server.listen(
-            address=self.ip, port=self.port_settings, default=True
-        )
 
         # also allow oscrouter in settings path for backwards compatibility
         for base_path in ["oscrouter", "osckreuz"]:
-            self.osc_setting_server.bind(
-                f"/{base_path}/debug/osccopy".encode(), self.oscreceived_debugOscCopy
+            self.osc_setting_dispatcher.map(
+                f"/{base_path}/debug/osccopy", self.osc_handler_osccopy
             )
-            self.osc_setting_server.bind(
-                f"/{base_path}/debug/verbose".encode(), self.oscreceived_verbose
+            self.osc_setting_dispatcher.map(
+                f"/{base_path}/debug/verbose", self.osc_handler_verbose
             )
-            self.osc_setting_server.bind(
-                f"/{base_path}/subscribe".encode(), self.oscreceived_subscriptionRequest
+            self.osc_setting_dispatcher.map(
+                f"/{base_path}/subscribe", self.osc_handler_subscribe
             )
-            self.osc_setting_server.bind(
-                f"/{base_path}/unsubscribe".encode(), self.osc_handler_unsubscribe
+            self.osc_setting_dispatcher.map(
+                f"/{base_path}/unsubscribe", self.osc_handler_unsubscribe
             )
-            self.osc_setting_server.bind(
-                f"/{base_path}/ping".encode(), self.oscreceived_ping
-            )
-            self.osc_setting_server.bind(
-                f"/{base_path}/pong".encode(), self.oscreceived_pong
-            )
-            self.osc_setting_server.bind(
-                f"/{base_path}/dump".encode(), self.oscreceived_dump
-            )
+            self.osc_setting_dispatcher.map(f"/{base_path}/ping", self.osc_handler_ping)
+            self.osc_setting_dispatcher.map(f"/{base_path}/pong", self.osc_handler_pong)
+            self.osc_setting_dispatcher.map(f"/{base_path}/dump", self.osc_handler_dump)
 
-    def oscreceived_ping(self, *args):
+        # handler for twonder connection
+        self.osc_setting_dispatcher.map(
+            "/WONDER/stream/render/connect", self.osc_handler_twonder_connect
+        )
 
-        if self.checkPort(args[0]):
-            self.osc_setting_server.answer(
-                b"/oscrouter/pong", port=args[0], values=["osc-kreuz".encode()]
-            )
+    def osc_handler_ping(self, address: str, *args):
+        pass
+        # TODO fix
+        # if self.checkPort(args[0]):
+        #     self.osc_setting_server.answer(
+        #         b"/oscrouter/pong", port=args[0], values=["osc-kreuz"]
+        #     )
 
-    def oscreceived_pong(self, *args):
+    def osc_handler_pong(self, address: str, *args):
 
         try:
             clientName = args[0]
-            self.clientSubscriptions[clientName].receivedIsAlive()
+            self.subscribed_clients[clientName].receivedIsAlive()
         except Exception:
             if self.verbosity > 0:
                 _name = ""
@@ -103,7 +136,7 @@ class OSCComCenter:
                     _name = args[0]
                 log.info("no renderer for pong message {}".format(_name))
 
-    def oscreceived_subscriptionRequest(self, *args) -> None:
+    def osc_handler_subscribe(self, address: str, *args) -> None:
         """OSC Callback for subscription Requests.
 
         These requests follow the format:
@@ -115,46 +148,98 @@ class OSCComCenter:
         args[3] send source index as value instead of inside the osc prefix
         args[4] source position update rate
         """
-
-        viewClientInitValues = {}
-        vCName = args[0]
-        subArgs = len(args)
-        if subArgs >= 2:
+        client_init_dict = {}
+        client_name = args[0]
+        if len(args) >= 2:
             if self.checkPort(args[1]):
-                viewClientInitValues["port"] = args[1]
+                client_init_dict["port"] = int(args[1])
+                client_infos = self.osc_setting_server.get_request()[1]
 
-                _ip = self.osc_setting_server.get_sender()[1]
+                client_init_dict["hostname"] = str(client_infos[0])
 
-                viewClientInitValues["hostname"] = _ip
-
-                # if subArgs>2:
-                #     initKeys = ['dataformat', 'indexAsValue', 'updateintervall']
-                #     for i in range(2, subArgs):
-                #         viewClientInitValues[initKeys[i-2]] = args[i]
                 try:
-                    viewClientInitValues["dataformat"] = args[2].decode()
+                    client_init_dict["dataformat"] = args[2]
                 except KeyError:
                     pass
                 try:
-                    viewClientInitValues["indexAsValue"] = args[3]
+                    client_init_dict["indexAsValue"] = args[3]
                 except KeyError:
                     pass
                 try:
-                    viewClientInitValues["updateintervall"] = args[4]
+                    client_init_dict["updateintervall"] = args[4]
                 except KeyError:
                     pass
-            newViewClient = ViewClient(vCName, **viewClientInitValues)
+            # make sure clients that try to connect rapidly don't accidentally overwrite themselves
+            with self.connection_semaphore:
+                # check if this client is already connected
+                if client_name in self.subscribed_clients:
+                    if (
+                        self.subscribed_clients[client_name].receivers[0][0]
+                        == client_init_dict["hostname"]
+                        and self.subscribed_clients[client_name].receivers[0][1]._port
+                        == client_init_dict["port"]
+                    ):
+                        log.info(f"client {client_name} tried to reconnect")
+                        return
+                    else:
+                        log.warning(f"client {client_name} exists already")
+                        return
+                newViewClient = ViewClient(client_name, **client_init_dict)
 
-            self.clientSubscriptions[vCName] = newViewClient
-            # TODO check if this is threadsafe (it probably isn't)
-            self.receivers.append(newViewClient)
-            newViewClient.checkAlive(self.deleteClient)
+                self.subscribed_clients[client_name] = newViewClient
+                self.receivers.append(newViewClient)
+                newViewClient.checkAlive(self.deleteClient)
 
         else:
             if self.verbosity > 0:
                 log.info("not enough arguments für view client")
 
-    def osc_handler_unsubscribe(self, *args) -> None:
+    def osc_handler_twonder_connect(self, address: str, *args) -> None:
+
+        # get name of twonder (only sent to osc path with signature "s")
+        # TODO do something useful with the name
+        name = "default_twonder"
+        if len(args) == 1:
+            name = args[0]
+
+        # parse hostname and port
+        if len(args) == 2:
+            hostname = args[0]
+            port = args[1]
+        else:
+            client_infos = self.osc_setting_server.get_request()[1]
+
+            hostname = client_infos[0]
+            port = client_infos[1]
+
+        if not self.checkPort(port) or not isinstance(hostname, str):
+            log.warning(f"Invalid twonder connection request by {name}")
+            return
+
+        with self.connection_semaphore:
+            # get twonder from receivers list if it already exists
+            twonder = next(
+                (
+                    receiver
+                    for receiver in self.receivers
+                    if isinstance(receiver, TWonder)
+                ),
+                None,
+            )
+            if twonder is not None:
+                twonder.add_receiver(hostname, port)
+                log.info(f"new twonder {name} connected to receiver")
+            else:
+                try:
+                    receiver = TWonder(hostname=hostname, port=port, updateintervall=50)
+                except RendererException as e:
+                    log.error(e)
+                    return
+
+                self.receivers.append(receiver)
+                log.info(f"twonder {name} connected")
+
+    def osc_handler_unsubscribe(self, address: str, *args) -> None:
         """OSC Callback for unsubscribe Requests.
 
         These requests follow the format:
@@ -166,7 +251,7 @@ class OSCComCenter:
         if len(args) >= 1:
             client_name = args[0]
             try:
-                view_client = self.clientSubscriptions[client_name]
+                view_client = self.subscribed_clients[client_name]
                 self.deleteClient(view_client, client_name)
 
             except KeyError:
@@ -174,7 +259,7 @@ class OSCComCenter:
         else:
             log.warning("not enough arguments für view client")
 
-    def oscreceived_dump(self, *args):
+    def osc_handler_dump(self, address: str, *args):
         pass
         # TODO: dump all source data to renderer
 
@@ -185,12 +270,20 @@ class OSCComCenter:
             log.info(f"deleting client {viewC}, {alias}")
         try:
             self.receivers.remove(viewC)
-            del self.clientSubscriptions[alias]
+            del self.subscribed_clients[alias]
             log.info(f"removed client {alias}")
         except (ValueError, KeyError):
             log.warning(f"tried to delete receiver {alias}, but it does not exist")
 
     def checkPort(self, port) -> bool:
+        """returns true when the port is of type int and in the valid range
+
+        Args:
+            port (Any): port to be checked
+
+        Returns:
+            bool: True if port is valid
+        """
         if type(port) is int and 1023 < port < 65535:
             return True
         else:
@@ -198,19 +291,19 @@ class OSCComCenter:
                 log.info(f"port {port} not legit")
             return False
 
-    def oscreceived_debugOscCopy(self, *args):
+    def osc_handler_osccopy(self, address: str, *args):
         ip = ""
         port = 0
         if len(args) == 2:
-            ip = args[0].decode()
+            ip = args[0]
             port = args[1]
         elif len(args) == 1:
-            ipport = args[0].decode().split(":")
+            ipport = args[0].split(":")
             if len(ipport) == 2:
                 ip = ipport[0]
                 port = ipport[1]
         else:
-            Renderer.debugCopy = False
+            BaseRenderer.debugCopy = False
             log.info("debug client: invalid message format")
             return
         try:
@@ -223,13 +316,13 @@ class OSCComCenter:
         log.info(f"debug client connected: {ip}:{port}")
 
         if 1023 < osccopy_port < 65535:
-            Renderer.createDebugClient(str(osccopy_ip), osccopy_port)
-            Renderer.debugCopy = True
+            BaseRenderer.createDebugClient(str(osccopy_ip), osccopy_port)
+            BaseRenderer.debugCopy = True
             return
 
-        Renderer.debugCopy = False
+        BaseRenderer.debugCopy = False
 
-    def oscreceived_verbose(self, *args):
+    def osc_handler_verbose(self, address: str, *args):
         vvvv = -1
         try:
             vvvv = int(args[0])
@@ -284,9 +377,6 @@ class OSCComCenter:
     ) -> None:
         """Sets up all Osc Bindings"""
         self.setupOscSettingsBindings()
-
-        self.osc_ui_server.listen(address=self.ip, port=self.port_ui, default=True)
-        self.osc_data_server.listen(address=self.ip, port=self.port_data, default=True)
 
         log.info(
             f"listening on port {self.port_ui} for data, {self.port_settings} for settings"
@@ -429,23 +519,20 @@ class OSCComCenter:
         #                 )
 
         if self.verbosity > 2:
-            for add in self.osc_ui_server.addresses:
+            for add in self.osc_ui_dispatcher._map.keys():
                 log.info(add)
 
     def bindToDataAndUiPort(self, addr: str, func: Callable):
         log.debug(f"Adding OSC callback for {addr}")
-        addrEnc = addr.encode()
 
-        # if verbosity >= 2:
-        self.osc_ui_server.bind(
-            addrEnc, partial(self.printOSC, addr=addr, port=self.port_ui)
-        )
-        self.osc_data_server.bind(
-            addrEnc, partial(self.printOSC, addr=addr, port=self.port_data)
-        )
+        if self.verbosity >= 2:
+            self.osc_ui_dispatcher.map(addr, partial(self.printOSC, port=self.port_ui))
+            self.osc_data_dispatcher.map(
+                addr, partial(self.printOSC, port=self.port_data)
+            )
 
-        self.osc_ui_server.bind(addrEnc, partial(func, fromUi=True))
-        self.osc_data_server.bind(addrEnc, partial(func, fromUi=False))
+        self.osc_ui_dispatcher.map(addr, partial(func, fromUi=True))
+        self.osc_data_dispatcher.map(addr, partial(func, fromUi=False))
 
     def sourceLegit(self, id: int) -> bool:
         indexInRange = 0 <= id < self.n_sources
@@ -478,7 +565,7 @@ class OSCComCenter:
         return indexInRange
 
     def osc_handler_position(
-        self, *args, coord_fmt: str = "xyz", source_index=-1, fromUi=True
+        self, address: str, *args, coord_fmt: str = "xyz", source_index=-1, fromUi=True
     ):
         args_index = 0
 
@@ -487,10 +574,16 @@ class OSCComCenter:
                 source_index = int(args[args_index]) - 1
                 args_index += 1
             except ValueError:
-                return False
+                log.warning(
+                    f"tried to set position invalid source index type: {args[args_index]}"
+                )
+                return
 
         if not self.sourceLegit(source_index):
-            return False
+            log.warning(
+                f"tried to set position for invalid source index {source_index}"
+            )
+            return
 
         if self.soundobjects[source_index].setPosition(
             coord_fmt, *args[args_index:], fromUi=fromUi
@@ -500,8 +593,8 @@ class OSCComCenter:
             )
 
     def osc_handler_gain(
-        self, *args, source_index=-1, render_index=-1, fromUi: bool = True
-    ) -> bool:
+        self, address: str, *args, source_index=-1, render_index=-1, fromUi: bool = True
+    ):
 
         args_index = 0
 
@@ -510,31 +603,48 @@ class OSCComCenter:
                 source_index = int(args[args_index]) - 1
                 args_index += 1
             except ValueError:
-                return False
+                log.warning(
+                    f"Failed to parse source index for message to {address} with args {args}"
+                )
+                return
 
         if render_index == -1:
             try:
                 render_index = int(args[args_index])
                 args_index += 1
             except ValueError:
-                return False
+                log.warning(
+                    f"Failed to parse render index for message to {address} with args {args}"
+                )
+                return
 
         try:
             gain = float(args[args_index])
         except ValueError:
-            return False
+            log.warning(
+                f"Failed to parse gain for message to {address} with args {args}"
+            )
+
+            return
 
         if not (self.sourceLegit(source_index) and self.renderIndexLegit(render_index)):
-            return False
+            log.warning(
+                f"invalid source or render index in message to {address} with args {args}"
+            )
+            return
 
         if self.soundobjects[source_index].setRendererGain(render_index, gain, fromUi):
             self.notifyRenderClientsForUpdate(
                 "sourceRenderGainChanged", source_index, render_index, fromUi=fromUi
             )
-        return True
 
     def osc_handler_direct_send_gain(
-        self, *args, source_index=-1, direct_send_index=-1, fromUi: bool = True
+        self,
+        address: str,
+        *args,
+        source_index=-1,
+        direct_send_index=-1,
+        fromUi: bool = True,
     ):
         args_index = 0
         if source_index == -1:
@@ -542,24 +652,24 @@ class OSCComCenter:
                 source_index = int(args[args_index]) - 1
                 args_index += 1
             except ValueError:
-                return False
+                return
 
         if direct_send_index == -1:
             try:
                 direct_send_index = int(args[args_index])
                 args_index += 1
             except ValueError:
-                return False
+                return
 
         try:
             gain = float(args[args_index])
         except ValueError:
-            return False
+            return
 
         if not (
             self.sourceLegit(source_index) and self.directSendLegit(direct_send_index)
         ):
-            return False
+            return
 
         if self.soundobjects[source_index].setDirectSend(
             direct_send_index, gain, fromUi
@@ -570,40 +680,41 @@ class OSCComCenter:
                 direct_send_index,
                 fromUi=fromUi,
             )
-        return True
+        return
 
     def osc_handler_attribute(
         self,
+        address: str,
         *args,
         source_index=-1,
         attribute: skc.SourceAttributes | None = None,
         fromUi: bool = True,
-    ) -> bool:
+    ):
         args_index = 0
         if source_index == -1:
             try:
                 source_index = int(args[args_index]) - 1
                 args_index += 1
             except ValueError:
-                return False
+                return
 
         if attribute is None:
             try:
                 attribute = skc.SourceAttributes(args[args_index])
                 args_index += 1
             except ValueError:
-                return False
+                return
 
         try:
             value = float(args[args_index])
         except ValueError:
-            return False
+            return
 
         if self.soundobjects[source_index].setAttribute(attribute, value, fromUi):
             self.notifyRenderClientsForUpdate(
                 "sourceAttributeChanged", source_index, attribute, fromUi=fromUi
             )
-        return True
+        return
 
     def notifyRenderClientsForUpdate(
         self, updateFunction: str, *args, fromUi: bool = True
@@ -612,6 +723,6 @@ class OSCComCenter:
             updatFunc = getattr(receiver, updateFunction)
             updatFunc(*args)
 
-    def printOSC(self, *args: Any, addr: str = "", port: int = 0) -> None:
+    def printOSC(self, addr: str, *args: Any, port: int = 0) -> None:
         if self.bPrintOSC:
             log.info("incoming OSC on Port", port, addr, args)

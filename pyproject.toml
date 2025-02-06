@@ -12,11 +12,11 @@ maintainers = [
 readme = "README.md"
 requires-python = ">=3.10"
 dynamic = ["version"]
-dependencies = ["numpy", "oscpy", "click", "pyYAML"]
+dependencies = ["numpy", "python-osc", "click", "pyYAML"]
 license = { file = "LICENSE" }
 
 [project.optional-dependencies]
-tests = ['pytest', 'pyfar']
+tests = ['pytest', 'pyfar', 'pytest-cov']
 
 [project.scripts]
 osc-kreuz = "osc_kreuz.osc_kreuz:main"
