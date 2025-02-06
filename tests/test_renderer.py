@@ -77,17 +77,17 @@ def prepare_renderer(conf: dict, disable_network: bool = True):
 
     SoundObject.readGlobalConfig(global_conf)
 
-    r.Renderer.numberOfSources = 1
-    r.Renderer.sources = [SoundObject(), SoundObject()]
-    r.Renderer.globalConfig = global_conf
+    r.BaseRenderer.numberOfSources = 1
+    r.BaseRenderer.sources = [SoundObject(), SoundObject()]
+    r.BaseRenderer.globalConfig = global_conf
     if disable_network:
-        r.Renderer.update_source = function_override
+        r.BaseRenderer.update_source = function_override
     client = r.createRendererClient(conf)
     return client
 
 
 def check_source_update(
-    renderer: r.Renderer,
+    renderer: r.BaseRenderer,
     update_type: str,
     source_idx,
     expected_path: list[str] | str,

@@ -17,7 +17,7 @@ from osc_kreuz.config import (
     read_renderer_state_file,
 )
 import osc_kreuz.osccomcenter as osccomcenter
-from osc_kreuz.renderer import Renderer, RendererException, createRendererClient
+from osc_kreuz.renderer import BaseRenderer, RendererException, createRendererClient
 from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc
 
@@ -61,7 +61,7 @@ def debug_prints(
 
     log.debug("max gain is %s", globalconfig[skc.max_gain])
 
-    if Renderer.debugCopy:
+    if BaseRenderer.debugCopy:
         log.debug("Osc-Messages will be copied to somewhere")
     else:
         log.debug("No Debug client configured")
@@ -134,8 +134,8 @@ def main(
         oscDebugParams = oscdebug.split(":")
         debugIp = oscDebugParams[0]
         debugPort = int(oscDebugParams[1])
-        Renderer.createDebugClient(debugIp, debugPort)
-        Renderer.debugCopy = True
+        BaseRenderer.createDebugClient(debugIp, debugPort)
+        BaseRenderer.debugCopy = True
 
     # read config values
     globalconfig: dict[str, Any] = read_config_option(
@@ -166,11 +166,11 @@ def main(
     # set global config in objects
     SoundObject.readGlobalConfig(globalconfig)
     SoundObject.number_renderer = n_renderunits
-    Renderer.globalConfig = globalconfig
+    BaseRenderer.globalConfig = globalconfig
 
     # setup number of sources
 
-    Renderer.numberOfSources = numberofsources
+    BaseRenderer.numberOfSources = numberofsources
 
     # Data initialisation
     soundobjects: list[SoundObject] = [
@@ -179,9 +179,9 @@ def main(
     ]
 
     # soundobjects are added as a class variable to the render class, so every renderer has access to them
-    Renderer.sources = soundobjects
+    BaseRenderer.sources = soundobjects
 
-    receivers: list[Renderer] = []
+    receivers: list[BaseRenderer] = []
 
     # setting up receivers from config file
     log.info("setting up receivers")

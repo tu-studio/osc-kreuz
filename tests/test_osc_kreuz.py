@@ -1,13 +1,17 @@
 from itertools import product
 import itertools
 import math
+import os
 from pathlib import Path
 import random
+import shutil
 from threading import Thread
 import threading
 from time import sleep
+import uuid
 
 import numpy as np
+import pytest
 from pythonosc.udp_client import SimpleUDPClient
 
 from osc_kreuz.config import read_config
@@ -24,7 +28,6 @@ import osc_kreuz.osc_kreuz
 import osc_kreuz.str_keys_conventions as skc
 from osckreuz_listener import SeamlessListener, Source
 
-import pytest
 
 test_config = Path(__file__).parent / "assets" / "config_test.yml"
 
@@ -111,6 +114,19 @@ def listener(request):
     # tear down
     print("unsubscribing")
     listener.shutdown()
+
+
+@pytest.fixture(autouse=True)
+def change_state_dir(monkeypatch):
+
+    runtime_dir = Path(os.environ.get("XDG_RUNTIME_DIR") or Path("/tmp/"))
+    runtime_dir = runtime_dir / "osc-kreuz-test" / str(uuid.uuid4())
+
+    if runtime_dir.exists():
+        shutil.rmtree(runtime_dir)
+    runtime_dir.mkdir(parents=True)
+
+    monkeypatch.setenv("XDG_STATE_DIR", str(runtime_dir))
 
 
 def osc_kreuz_runner(*args, **kwargs):

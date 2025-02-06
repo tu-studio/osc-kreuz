@@ -9,7 +9,7 @@ from pythonosc.dispatcher import Dispatcher
 from pythonosc.osc_server import BlockingOSCUDPServer
 
 from osc_kreuz.coordinates import get_all_coordinate_formats
-from osc_kreuz.renderer import Renderer, RendererException, TWonder, ViewClient
+from osc_kreuz.renderer import BaseRenderer, RendererException, TWonder, ViewClient
 from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc
 
@@ -21,7 +21,7 @@ class OSCComCenter:
     def __init__(
         self,
         soundobjects: list[SoundObject],
-        receivers: list[Renderer],
+        receivers: list[BaseRenderer],
         renderengines: list[str],
         n_sources: int,
         n_direct_sends: int,
@@ -88,7 +88,7 @@ class OSCComCenter:
     def setVerbosity(self, v: int):
         self.verbosity = v
         self.bPrintOSC = v >= 2
-        Renderer.setVerbosity(v)
+        BaseRenderer.setVerbosity(v)
         log.debug(f"verbosity set to {v}")
 
     def setupOscSettingsBindings(self):
@@ -303,7 +303,7 @@ class OSCComCenter:
                 ip = ipport[0]
                 port = ipport[1]
         else:
-            Renderer.debugCopy = False
+            BaseRenderer.debugCopy = False
             log.info("debug client: invalid message format")
             return
         try:
@@ -316,11 +316,11 @@ class OSCComCenter:
         log.info(f"debug client connected: {ip}:{port}")
 
         if 1023 < osccopy_port < 65535:
-            Renderer.createDebugClient(str(osccopy_ip), osccopy_port)
-            Renderer.debugCopy = True
+            BaseRenderer.createDebugClient(str(osccopy_ip), osccopy_port)
+            BaseRenderer.debugCopy = True
             return
 
-        Renderer.debugCopy = False
+        BaseRenderer.debugCopy = False
 
     def osc_handler_verbose(self, address: str, *args):
         vvvv = -1
