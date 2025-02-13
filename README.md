@@ -137,21 +137,23 @@ The configuration is done using a YAML-Config file, an example config file can b
 
 ## global config
 
-the `globalconfig`-Section of the Config contains general settings:
+the `global`-Section of the Config contains general settings:
 
-| Setting               | Description                                                                                                                      | Default                   |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `ip`                  | ip address the osc-kreuz listens on                                                                                              | 127.0.0.1                 |
-| `port_ui`             | Highest Priority listen-port intended for GUI applications                                                                       | 4455                      |
-| `port_data`           | lower priority port for listening to automated clients. pauses listening when data is received on `inputport_ui`                 | 4007                      |
-| `port_settings`       | global configs can be changed on this port                                                                                       | 4999                      |
-| `number_sources`      | number of source audio channels                                                                                                  | 64                        |
-| `max_gain`            | max gain for the audiorouter                                                                                                     | 2                         |
-| `number_direct_sends` | number of direct send channels                                                                                                   | 46                        |
-| `send_changes_only`   | only send when source data has changed,                                                                                          | true                      |
-| `data_port_timeout`   | when data is received on the ui port, the data port is paused for this timeout, in seconds, set to 0 to deactivate               | 2                         |
-| `render_units`        | available render units in this system                                                                                            | ["ambi", "wfs", "reverb"] |
-| `room_scaling_factor` | All incoming position changes are multiplied by this factor. this allows using the same control panel in differently sized rooms | 1                         |
+| Setting               | Description                                                                                                                                                                                                                      | Default                   |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `ip`                  | ip address the osc-kreuz listens on                                                                                                                                                                                              | 127.0.0.1                 |
+| `port_ui`             | Highest Priority listen-port intended for GUI applications                                                                                                                                                                       | 4455                      |
+| `port_data`           | lower priority port for listening to automated clients. pauses listening when data is received on `inputport_ui`                                                                                                                 | 4007                      |
+| `port_settings`       | used for connection requests and debug functions                                                                                                                                                                                 | 4999                      |
+| `number_sources`      | number of source audio channels                                                                                                                                                                                                  | 64                        |
+| `max_gain`            | max gain for the audiorouter                                                                                                                                                                                                     | 2                         |
+| `number_direct_sends` | number of direct send channels                                                                                                                                                                                                   | 46                        |
+| `send_changes_only`   | only send when source data has changed,                                                                                                                                                                                          | true                      |
+| `data_port_timeout`   | when data is received on the ui port, the data port is paused for this timeout, in seconds, set to 0 to deactivate                                                                                                               | 2                         |
+| `render_units`        | available render units in this system                                                                                                                                                                                            | ["ambi", "wfs", "reverb"] |
+| `room_scaling_factor` | All incoming position changes are multiplied by this factor. this allows using the same control panel in differently sized rooms                                                                                                 | 1                         |
+| `room_name`           | only used for CWonder emulation, name of the current room                                                                                                                                                                        | "default_room"            |
+| `room_polygon`        | only needed for CWonder emulation. List of points describing the WFS-System layout. each point is represented by a list containing its x, y and z coordinates as floats. for example `room_polygon: [[0,0,0], [1,0,0], [0,1,0]]` | []                        |
 
 ## Receivers
 

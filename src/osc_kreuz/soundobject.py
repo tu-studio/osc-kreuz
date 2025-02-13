@@ -37,8 +37,10 @@ class SoundObject(object):
 
     def __init__(self, objectID: int = 0, coordinate_scaling_factor: float = 1):
 
+        # XXX this is currently not used
         self.objectID = objectID
 
+        # initialize coordinate dict
         self.position: dict[CoordinateSystemType, Coordinate] = {
             CoordinateSystemType.Cartesian: CoordinateCartesian(1, 0, 0),
             CoordinateSystemType.Polar: CoordinatePolar(0, 0, 1),
@@ -47,28 +49,32 @@ class SoundObject(object):
 
         self.coordinate_scaling_factor = coordinate_scaling_factor
 
+        # initialize attributes
         self._sourceattributes = {
             skc.SourceAttributes.planewave: 0,
-            skc.SourceAttributes.doppler: 0,
+            skc.SourceAttributes.doppler: 1,
             skc.SourceAttributes.angle: 0.0,
         }
 
+        # get the number of renderers
         if "render_units" in self.globalConfig:
             self.number_renderer = len(self.globalConfig["render_units"])
 
+        # setup direct and renderer send gains
         self._torendererSends = [float(0.0) for _ in range(self.number_renderer)]
         self._directSends = [0.0] * self.globalConfig["number_direct_sends"]
 
+        # setup dict that hold information whether some value was blocked by the ui port
         self.uiBlockingDict = {}
         self.uiBlockingDict["position"] = self.createBlockingDict()
 
         self.uiBlockingDict["attribute"] = self.createBlockingDict()
 
         self.uiBlockingDict["rendergain"] = []
-        for i in range(self.number_renderer):
+        for _ in range(self.number_renderer):
             self.uiBlockingDict["rendergain"].append(self.createBlockingDict())
         self.uiBlockingDict["directsend"] = []
-        for i in range(self.globalConfig["number_direct_sends"]):
+        for _ in range(self.globalConfig["number_direct_sends"]):
             self.uiBlockingDict["directsend"].append(self.createBlockingDict())
 
     def createBlockingDict(self) -> dict:
