@@ -557,7 +557,8 @@ class TWonder(Wonder):
             add_renderer_to_state_file("twonder", hostname, port)
 
         # send current state to twonder
-        self.send_room_information(hostname, port)
+        # BUGFIX don't do this here until the twonder bug causing it to work inconsistently when getting initialized twice is fixed
+        # self.send_room_information(hostname, port)
         self.dump_source_positions()
 
     def send_room_information(self, hostname: str, port: int):
