@@ -207,6 +207,7 @@ class OSCComCenter:
             hostname = args[0]
             port = args[1]
         else:
+            # get hostname and port from the request information
             client_infos = self.osc_setting_server.get_request()[1]
 
             hostname = client_infos[0]
@@ -231,13 +232,16 @@ class OSCComCenter:
                 log.info(f"new twonder {name} connected to receiver")
             else:
                 try:
-                    receiver = TWonder(hostname=hostname, port=port, updateintervall=50)
+                    twonder = TWonder(hostname=hostname, port=port, updateintervall=50)
                 except RendererException as e:
                     log.error(e)
                     return
 
-                self.receivers.append(receiver)
+                self.receivers.append(twonder)
                 log.info(f"twonder {name} connected")
+
+            # send initialization infos to twonder
+            twonder.send_room_information(hostname, port)
 
     def osc_handler_unsubscribe(self, address: str, *args) -> None:
         """OSC Callback for unsubscribe Requests.
