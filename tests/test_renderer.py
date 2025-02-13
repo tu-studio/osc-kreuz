@@ -144,7 +144,7 @@ def test_wonder_renderer():
     )
 
     for attr, path, expected in [
-        (skc.SourceAttributes.doppler, "/WONDER/source/dopplerEffect", [0, 0]),
+        (skc.SourceAttributes.doppler, "/WONDER/source/dopplerEffect", [0, 1]),
         (skc.SourceAttributes.planewave, "/WONDER/source/type", [0, 1]),
         (
             skc.SourceAttributes.angle,
