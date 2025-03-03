@@ -357,7 +357,7 @@ class BaseRenderer(object):
 
                 # if explicit hostname and port are specified skip all receivers that don't match
                 if hostname is not None and port is not None:
-                    if r_hostname != hostname and receiver._port != port:
+                    if r_hostname != hostname or receiver._port != port:
                         continue
 
                 try:

@@ -240,8 +240,8 @@ class OSCComCenter:
                 self.receivers.append(twonder)
                 log.info(f"twonder {name} connected")
 
-            # send initialization infos to twonder
-            twonder.send_room_information(hostname, port)
+        # send initialization infos to twonder
+        twonder.send_room_information(hostname, port)
 
     def osc_handler_unsubscribe(self, address: str, *args) -> None:
         """OSC Callback for unsubscribe Requests.
