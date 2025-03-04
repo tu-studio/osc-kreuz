@@ -134,7 +134,7 @@ state_suffix = "_state"
 
 def add_renderer_to_state_file(renderer: str, hostname: str, port: int):
     if not state_directory.exists():
-        state_directory.mkdir()
+        state_directory.mkdir(parents=True)
 
     renderer_str = f"{hostname};{port}\n"
     with open(state_directory / f"{renderer}{state_suffix}.csv", "a+") as f:
