@@ -148,7 +148,7 @@ class OSCComCenter:
         args[3] send source index as value instead of inside the osc prefix
         args[4] source position update rate
         """
-        client_init_dict = {}
+        client_init_dict: dict[str, Any] = {}
         client_name = args[0]
         if len(args) >= 2:
             if self.checkPort(args[1]):
@@ -188,6 +188,10 @@ class OSCComCenter:
 
                 self.subscribed_clients[client_name] = newViewClient
                 self.receivers.append(newViewClient)
+
+                # always send room polygon to view client after connecting
+                log.info("dumping room polygon")
+                newViewClient.dump_room_polygon()
                 newViewClient.checkAlive(self.deleteClient)
 
         else:
@@ -213,10 +217,12 @@ class OSCComCenter:
             hostname = client_infos[0]
             port = client_infos[1]
 
+        # check validity of hostname and port
         if not self.checkPort(port) or not isinstance(hostname, str):
             log.warning(f"Invalid twonder connection request by {name}")
             return
 
+        # connect twonders using semaphore so receivers dict is only changed by one twonder at a time
         with self.connection_semaphore:
             # get twonder from receivers list if it already exists
             twonder = next(
@@ -266,6 +272,18 @@ class OSCComCenter:
     def osc_handler_dump(self, address: str, *args):
         pass
         # TODO: dump all source data to renderer
+
+    def osc_handler_room_polygon(
+        self, address: str, client_name: str, osc_path="/room/polygon"
+    ):
+
+        try:
+            view_client = self.subscribed_clients[client_name]
+
+        except KeyError:
+            log.warning(f"can't delete client {client_name}, it does not exist")
+
+        view_client.dump_room_polygon(osc_path)
 
     def deleteClient(self, viewC, alias):
         # TODO check if this is threadsafe (it probably isn't)

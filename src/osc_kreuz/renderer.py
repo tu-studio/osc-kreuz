@@ -425,6 +425,39 @@ class BaseRenderer(object):
             ):
                 self.sourceRenderGainChanged(i, j)
 
+    def dump_room_polygon(
+        self,
+        oscpath: str = "/room/polygon",
+        hostname: str | None = None,
+        port: int | None = None,
+    ):
+        # send information about room
+        room_name = read_config_option(
+            self.globalConfig, "room_name", str, "default_room"
+        )
+
+        # read room polygon
+        room_polygon: list[list[float]] = read_config_option(
+            self.globalConfig, "room_polygon", list, []
+        )
+
+        # args for this osc-path are [room_name, n_points_polygon, point_0_x, point_0_y, point_0_z, point_1_x...]
+        args = [room_name, len(room_polygon)]
+
+        for point in room_polygon:
+            if len(point) != 3:
+                log.error(f"Invalid polygon point: {point}")
+                continue
+
+            try:
+                args.extend([float(p) for p in point])
+            except ValueError:
+                log.error(f"Invalid type for point {point}")
+
+        if len(args) == 2:
+            log.warning("Room Polygon has no points")
+        self.send_updates([Message(oscpath, args)], hostname, port)
+
     def printOscOutput(self, oscpath: str, data: list):
         log.debug("OSC to %s %s with values %s", self.__class__.__name__, oscpath, data)
 
@@ -573,34 +606,13 @@ class TWonder(Wonder):
         # send number of sources
         msgs.append(Message(self.oscpath_n_sources, self.numberOfSources))
 
-        # send information about room
-        room_name = read_config_option(
-            self.globalConfig, "room_name", str, "default_room"
-        )
-
-        # read room polygon
-        room_polygon = read_config_option(self.globalConfig, "room_polygon", list, [])
-        if len(room_polygon) == 0:
-            raise RendererException("room_polygon has length of 0")
-
-        # args for this osc-path are [room_name, n_points_polygon, point_0_x, point_0_y, point_0_z, point_1_x...]
-        args = [room_name, len(room_polygon)]
-        for point in room_polygon:
-            if len(point) != 3:
-                raise RendererException(f"Invalid polygon point: {point}")
-            for p in point:
-                if not isinstance(p, float):
-                    raise RendererException(
-                        f"Invalid type for coordinate {p} of polygon"
-                    )
-
-            args.extend(point)
-        msgs.append(Message(self.oscpath_room_polygon, args))
-
         # send activation information
         for i in range(self.numberOfSources):
             msgs.append(Message(self.oscpath_activate_source, i))
         self.send_updates(msgs, hostname, port)
+
+        # send room polygon
+        self.dump_room_polygon(self.oscpath_room_polygon, hostname, port)
 
 
 class Audiorouter(BaseRenderer):
@@ -738,7 +750,6 @@ class ViewClient(SpatialRenderer):
 
     def __init__(self, aliasname: str, **kwargs):
         self.alias = aliasname
-        log.info(type(self.alias))
 
         super(ViewClient, self).__init__(**kwargs)
 
@@ -749,9 +760,8 @@ class ViewClient(SpatialRenderer):
             self.indexAsValue = kwargs["indexAsValue"]
 
         # TODO initialize variables only once, and with a consistent type pl0x
-        self.idxSourceOscPrePos = [""] * self.numberOfSources
-        self.idxSourceOscPreAttri = [{}] * self.numberOfSources
-        self.idxSourceOscPreRender = [
+        self.oscpath_position_with_index = [""] * self.numberOfSources
+        self.oscpath_gain_with_index = [
             ["" for j in range(self.globalConfig["n_renderengines"])]
             for i in range(self.numberOfSources)
         ]
@@ -766,12 +776,7 @@ class ViewClient(SpatialRenderer):
 
     def createOscPrefixes(self):
         for i in range(self.numberOfSources):
-            self.idxSourceOscPrePos[i] = "/source/{}/{}".format(i + 1, self.posFormat)
-            _aDic = {}
-            for attr in skc.knownAttributes:
-                _aDic[attr] = "/source/{}/{}".format(i + 1, attr)
-
-            self.idxSourceOscPreAttri[i] = _aDic
+            self.oscpath_position_with_index[i] = f"/source/{i+1}/{self.posFormat}"
 
             try:
                 render_units = self.globalConfig["render_units"]
@@ -784,17 +789,13 @@ class ViewClient(SpatialRenderer):
                 and "wfs" in render_units
                 and "reverb" in render_units
             ):
-                renderList[render_units.index("ambi")] = "/source/{}/ambi".format(i + 1)
-                renderList[render_units.index("wfs")] = "/source/{}/wfs".format(i + 1)
-                renderList[render_units.index("reverb")] = "/source/{}/reverb".format(
-                    i + 1
-                )
+                renderList[render_units.index("ambi")] = f"/source/{i+1}/ambi"
+                renderList[render_units.index("wfs")] = f"/source/{i+1}/wfs"
+                renderList[render_units.index("reverb")] = f"/source/{i+1}/reverb"
             else:
                 for j in range(self.globalConfig["n_renderengines"]):
-                    self.idxSourceOscPreRender[i][j] = "/source/{}/send/{}".format(
-                        i + 1, j
-                    )
-            self.idxSourceOscPreRender[i] = renderList
+                    self.oscpath_gain_with_index[i][j] = f"/source/{i+1}/send/{j}"
+            self.oscpath_gain_with_index[i] = renderList
 
     def checkAlive(self, deleteClient):
         self.pingTimer = Timer(2.0, self.checkAlive, args=(deleteClient,))
@@ -824,7 +825,7 @@ class ViewClient(SpatialRenderer):
 
     def sourcePositionChanged(self, source_idx):
         if self.indexAsValue:
-            path = self.idxSourceOscPrePos[source_idx]
+            path = self.oscpath_position_with_index[source_idx]
             source_index_for_update = None
         else:
             path = self.oscpath_position
@@ -842,7 +843,7 @@ class ViewClient(SpatialRenderer):
     def sourceRenderGainChanged(self, source_idx, render_idx):
         # TODO option to send named paths instead
         if self.indexAsValue:
-            path = self.idxSourceOscPreRender[source_idx][render_idx]
+            path = self.oscpath_gain_with_index[source_idx][render_idx]
             source_index_for_update = None
         else:
             path = "/source/send"
