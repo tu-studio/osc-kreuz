@@ -12,17 +12,10 @@ log = logging.getLogger("renderer")
 verbosity = 0
 
 
-
-
 class wonderPlanewaveAttributeUpdate(AttributeUpdate):
     def get_value(self):
         # for the planewave attribute, the value has to be inverted
         return int(not super().get_value())
-
-
-
-
-
 
 
 class Wonder(SpatialRenderer):
@@ -125,16 +118,41 @@ class TWonder(Wonder):
     oscpath_activate_source = "/WONDER/source/activate"
 
     def __init__(self, **kwargs):
-        
+        # automatically extract this info from the supplied addresses
         self.is_multicast = bool(kwargs.pop("multicast", False))
         super().__init__(**kwargs)
-        
-    def add_receiver(self, hostname: str, port: int):
 
+    def add_twonder(self, hostname: str, port: int) -> None:
+        """Initialize a new receiving twonder. 
+        if multicast is being used just send the initialization over, but don't save it
+        if multicast is not being used also add the twonder using add_receiver()
+
+        Args:
+            hostname (str): hostname of the twonder
+            port (int): port of the twonder
+
+        Raises:
+            RendererException: raised when the configuration does not allow for proper cwonder replacement
+        """
         # check that osc-kreuz is ready to function as cwonder replacement
         if "room_polygon" not in self.globalConfig:
             raise RendererException(
                 "Can't connect twonder because no room_polygon was specified in config"
+            )
+        if not self.is_multicast:
+            self.add_receiver(hostname, port)
+
+        self.send_room_information(hostname, port)
+
+        # find a way to do this without multicasting to every connected twonder
+        self.dump_source_positions()
+
+    def add_receiver(self, hostname: str, port: int):
+
+        # check that osc-kreuz is ready to function as cwonder replacement
+        if "room_polygon" not in self.globalConfig:
+            log.warning(
+                "Room polygon was not specified in config, the connected twonder might behave in unexpected ways"
             )
 
         # make sure every twonder is only added once
@@ -142,12 +160,8 @@ class TWonder(Wonder):
             (hostname, receiver._port) for hostname, receiver in self.receivers
         ):
             super().add_receiver(hostname, port)
-            add_renderer_to_state_file("twonder", hostname, port)
-
-        # send current state to twonder
-        # BUGFIX don't do this here until the twonder bug causing it to work inconsistently when getting initialized twice is fixed
-        # self.send_room_information(hostname, port)
-        self.dump_source_positions()
+            if not self.is_multicast:
+                add_renderer_to_state_file("twonder", hostname, port)
 
     def send_room_information(self, hostname: str, port: int):
         """send status information for renderer to twonder

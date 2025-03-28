@@ -53,6 +53,7 @@ receivers:
         type: gain
     updateintervall: 0
   - type: twonder
-    hostname: 234.0.0.2
-    port: 58201
+    hostname: 239.0.0.2
+    port: 58300
     multicast: true
+    updateintervall: 10

@@ -9,11 +9,14 @@ from osc_kreuz.config import read_config_option
 from osc_kreuz.soundobject import SoundObject
 
 from .updates import Update, OSCMessage
+
 log = logging.getLogger("renderer")
 verbosity = 0
 
+
 class RendererException(Exception):
     pass
+
 
 class BaseRenderer(object):
 
@@ -175,19 +178,26 @@ class BaseRenderer(object):
         t.name = f"rel_{source_idx:02}_{self.my_type()}"
         t.start()
 
-    def send_updates(self, msgs: list[OSCMessage], hostname: str | None = None, port: int | None = None):
+    def send_updates(
+        self,
+        msgs: list[OSCMessage],
+        hostname: str | None = None,
+        port: int | None = None,
+    ):
         """This function sends all messages to the osc clients
 
         Args:
             msgs (list[OSCMessage]): list of messages
         """
+        # if explicit hostname and port are specified,
+        # create a list with just one udp client for the specified host
+        receivers_to_update = (
+            [(hostname, SimpleUDPClient(hostname, port))]
+            if hostname is not None and port is not None
+            else self.receivers
+        )
         for msg in msgs:
-            for i, (r_hostname, receiver) in enumerate(self.receivers):
-
-                # if explicit hostname and port are specified skip all receivers that don't match
-                if hostname is not None and port is not None:
-                    if r_hostname != hostname or receiver._port != port:
-                        continue
+            for r_hostname, receiver in receivers_to_update:
 
                 try:
                     # time sending performance
@@ -285,6 +295,7 @@ class BaseRenderer(object):
 
         if len(args) == 2:
             log.warning("Room Polygon has no points")
+
         self.send_updates([OSCMessage(oscpath, args)], hostname, port)
 
     def printOscOutput(self, oscpath: str, data: list):

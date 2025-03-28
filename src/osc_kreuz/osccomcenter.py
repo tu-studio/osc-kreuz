@@ -198,7 +198,7 @@ class OSCComCenter:
 
         else:
             if self.verbosity > 0:
-                log.info("not enough arguments für view client")
+                log.info("not enough arguments for view client")
 
     def osc_handler_twonder_connect(self, address: str, *args) -> None:
 
@@ -236,7 +236,7 @@ class OSCComCenter:
                 None,
             )
             if twonder is not None:
-                twonder.add_receiver(hostname, port)
+                twonder.add_twonder(hostname, port)
                 log.info(f"new twonder {name} connected to receiver")
             else:
                 try:
@@ -246,10 +246,7 @@ class OSCComCenter:
                     return
 
                 self.receivers.append(twonder)
-                log.info(f"twonder {name} connected")
-
-        # send initialization infos to twonder
-        twonder.send_room_information(hostname, port)
+                log.info(f"twonder {name} connected and receiver created")
 
     def osc_handler_unsubscribe(self, address: str, *args) -> None:
         """OSC Callback for unsubscribe Requests.

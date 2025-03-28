@@ -18,7 +18,7 @@ from osc_kreuz.config import (
 )
 import osc_kreuz.osccomcenter as osccomcenter
 from osc_kreuz.renderer.base_renderer import BaseRenderer, RendererException
-from osc_kreuz.renderer import createRendererClient
+from osc_kreuz.renderer import createRendererClient, renderer_name_dict
 from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc
 
@@ -157,7 +157,6 @@ def main(
         port_ui = read_config_option(globalconfig, "port_ui", int, 4455)
     if port_data is None:
         port_data = read_config_option(globalconfig, "port_data", int, 4007)
-
     if port_settings is None:
         port_settings = read_config_option(globalconfig, "port_settings", int, 4999)
 
@@ -199,6 +198,13 @@ def main(
 
     # setting up receivers from state file
     for renderer in get_renderers_with_state_file():
+        # check if renderer for this state already exists
+        if any((isinstance(r, renderer_name_dict[renderer]) for r in receivers)):
+            log.warning(
+                "renderer with state from last run already exists, state is thus ignored"
+            )
+            continue
+
         log.info(f"setting up renderer {renderer} from last run")
         receiver_config = {
             "type": renderer,

@@ -1,5 +1,13 @@
-from email.mime import base
-from . import wonder_renderer, viewclient_renderer, supercolliderengine_renderer, audiomatrix_renderer, audiorouter_renderer, spatial_renderer, base_renderer, seamlessplugin_renderer
+from . import (
+    wonder_renderer,
+    viewclient_renderer,
+    supercolliderengine_renderer,
+    audiomatrix_renderer,
+    audiorouter_renderer,
+    spatial_renderer,
+    base_renderer,
+    seamlessplugin_renderer,
+)
 
 renderer_name_dict = {
     "wonder": wonder_renderer.Wonder,
@@ -12,8 +20,9 @@ renderer_name_dict = {
     "seamlessplugin": seamlessplugin_renderer.SeamlessPlugin,
     "audiorouterwfs": audiorouter_renderer.AudiorouterWFS,
     "audiomatrix": audiomatrix_renderer.AudioMatrix,
-    "spatial": spatial_renderer.SpatialRenderer
+    "spatial": spatial_renderer.SpatialRenderer,
 }
+
 
 def createRendererClient(config: dict) -> base_renderer.BaseRenderer:
 
