@@ -9,7 +9,9 @@ from pythonosc.dispatcher import Dispatcher
 from pythonosc.osc_server import BlockingOSCUDPServer
 
 from osc_kreuz.coordinates import get_all_coordinate_formats
-from osc_kreuz.renderer import BaseRenderer, RendererException, TWonder, ViewClient
+from osc_kreuz.renderer.base_renderer import BaseRenderer, RendererException
+from osc_kreuz.renderer.viewclient_renderer import ViewClient
+from osc_kreuz.renderer.wonder_renderer import TWonder
 from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc
 

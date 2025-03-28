@@ -17,7 +17,8 @@ from osc_kreuz.config import (
     read_renderer_state_file,
 )
 import osc_kreuz.osccomcenter as osccomcenter
-from osc_kreuz.renderer import BaseRenderer, RendererException, createRendererClient
+from osc_kreuz.renderer.base_renderer import BaseRenderer, RendererException
+from osc_kreuz.renderer import createRendererClient
 from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc
 
