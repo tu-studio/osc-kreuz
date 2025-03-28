@@ -122,6 +122,10 @@ class TWonder(Wonder):
         self.is_multicast = bool(kwargs.pop("multicast", False))
         super().__init__(**kwargs)
 
+        # send 3D positions if xyz format
+        if self.posFormat == "xyz":
+            self.oscpath_position += "3D"
+
     def add_twonder(self, hostname: str, port: int) -> None:
         """Initialize a new receiving twonder. 
         if multicast is being used just send the initialization over, but don't save it
