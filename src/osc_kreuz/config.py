@@ -41,6 +41,7 @@ deprecated_config_strings = {
     skc.inputport_ui: ["inputport_ui"],
     skc.inputport_data: ["inputport_data"],
     skc.inputport_settings: ["inputport_settings"],
+    "dataformat": ["format"]
 }
 
 

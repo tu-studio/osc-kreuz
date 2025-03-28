@@ -6,7 +6,7 @@ from typing import Any
 from .updates import GainUpdate, PositionUpdate
 
 from .base_renderer import BaseRenderer
-
+from ..config import read_config_option
 
 log = logging.getLogger("renderer")
 verbosity = 0
@@ -16,7 +16,7 @@ verbosity = 0
 
 
 class AudioMatrix(BaseRenderer):
-    def __init__(self, paths: Iterable[dict["str", Any]], **kwargs):
+    def __init__(self, paths: Iterable[dict[str, Any]], **kwargs):
         super().__init__(**kwargs)
         self.gain_paths: dict[int, list[str]] = {}
         self.pos_paths: list[tuple[str, str]] = []
@@ -41,10 +41,8 @@ class AudioMatrix(BaseRenderer):
                 renderer_index = self.render_unit_indices[renderer]
                 self.gain_paths[renderer_index].append(osc_path)
             elif path_type in ["position", "pos"]:
-                try:
-                    coord_fmt = path["format"]
-                except KeyError:
-                    coord_fmt = "xyz"
+                coord_fmt = read_config_option(path, "dataformat", str, "xyz")
+
                 self.pos_paths.append((osc_path, coord_fmt))
 
         log.debug("Audio Matrix initialized")
