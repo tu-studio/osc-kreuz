@@ -127,7 +127,7 @@ class TWonder(Wonder):
             self.oscpath_position += "3D"
 
     def add_twonder(self, hostname: str, port: int) -> None:
-        """Initialize a new receiving twonder. 
+        """Initialize a new receiving twonder.
         if multicast is being used just send the initialization over, but don't save it
         if multicast is not being used also add the twonder using add_receiver()
 
@@ -149,7 +149,7 @@ class TWonder(Wonder):
         self.send_room_information(hostname, port)
 
         # find a way to do this without multicasting to every connected twonder
-        self.dump_source_positions()
+        # self.dump_source_positions()
 
     def add_receiver(self, hostname: str, port: int):
 
