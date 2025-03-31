@@ -237,7 +237,9 @@ class OSCComCenter:
             )
             if twonder is not None:
                 twonder.add_twonder(hostname, port)
-                log.info(f"new twonder {name} connected to receiver")
+                log.info(
+                    f"new twonder {name} from {hostname}:{port} connected to receiver"
+                )
             else:
                 try:
                     twonder = TWonder(hostname=hostname, port=port, updateintervall=50)
@@ -246,7 +248,9 @@ class OSCComCenter:
                     return
 
                 self.receivers.append(twonder)
-                log.info(f"twonder {name} connected and receiver created")
+                log.info(
+                    f"twonder {name} from {hostname}:{port} connected and receiver created"
+                )
 
     def osc_handler_unsubscribe(self, address: str, *args) -> None:
         """OSC Callback for unsubscribe Requests.
