@@ -284,7 +284,8 @@ class OSCComCenter:
             view_client = self.subscribed_clients[client_name]
 
         except KeyError:
-            log.warning(f"can't delete client {client_name}, it does not exist")
+            log.warning(f"can't find client {client_name} in osc_handler_room_polygon")
+            return
 
         view_client.dump_room_polygon(osc_path)
 

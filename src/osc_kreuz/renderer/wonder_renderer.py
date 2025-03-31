@@ -174,6 +174,10 @@ class TWonder(Wonder):
             hostname (str): hostname of the receiving twonder
             port (int): port of the receiving twonder
         """
+
+        # send room polygon before number of sources, because twonder checks initialization based on the room polygon
+        self.dump_room_polygon(self.oscpath_room_polygon, hostname, port)
+
         msgs = []
 
         # send number of sources
@@ -183,6 +187,3 @@ class TWonder(Wonder):
         for i in range(self.numberOfSources):
             msgs.append(OSCMessage(self.oscpath_activate_source, i))
         self.send_updates(msgs, hostname, port)
-
-        # send room polygon
-        self.dump_room_polygon(self.oscpath_room_polygon, hostname, port)
