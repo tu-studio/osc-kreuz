@@ -16,7 +16,14 @@ dependencies = ["numpy", "python-osc", "click", "pyYAML"]
 license = { file = "LICENSE" }
 
 [project.optional-dependencies]
-tests = ['pytest', 'pyfar', 'pytest-cov']
+dev = [
+    'pytest',
+    'pyfar',
+    'pytest-cov',
+    'mkdocs-material',
+    'mkdocstrings[python]',
+]
+
 
 [project.scripts]
 osc-kreuz = "osc_kreuz.osc_kreuz:main"
