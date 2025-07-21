@@ -1,13 +1,18 @@
-
-
 import logging
 from threading import Timer
+from osc_kreuz.config import read_config_option
 from osc_kreuz.renderer.spatial_renderer import SpatialRenderer
-from osc_kreuz.renderer.updates import AttributeUpdate, DirectSendUpdate, GainUpdate, PositionUpdate
+from osc_kreuz.renderer.updates import (
+    AttributeUpdate,
+    DirectSendUpdate,
+    GainUpdate,
+    PositionUpdate,
+)
 import osc_kreuz.str_keys_conventions as skc
 
 log = logging.getLogger("renderer")
 verbosity = 0
+
 
 class ViewClient(SpatialRenderer):
     def my_type(self) -> str:
@@ -32,6 +37,10 @@ class ViewClient(SpatialRenderer):
         ]
 
         self.createOscPrefixes()
+
+        self.own_port = (
+            read_config_option(self.globalConfig, skc.inputport_settings, int),
+        )
 
         self.pingTimer: Timer | None = None
 
@@ -72,7 +81,7 @@ class ViewClient(SpatialRenderer):
                 self.receivers[0][1].send_message(
                     # TODO change ping path to constant defined somewhere else
                     "/oscrouter/ping",
-                    [self.globalConfig[skc.inputport_settings]],
+                    self.own_port,
                 )
             except Exception as e:
                 log.warning(e)
