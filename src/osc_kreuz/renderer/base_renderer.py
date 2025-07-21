@@ -295,6 +295,7 @@ class BaseRenderer(object):
 
         if len(args) == 2:
             log.warning("Room Polygon has no points")
+            return
 
         self.send_updates([OSCMessage(oscpath, args)], hostname, port)
 
