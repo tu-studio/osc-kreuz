@@ -99,11 +99,22 @@ T = TypeVar("T")
 
 
 def read_config_option(
-    config,
+    config: dict,
     option_name: str,
     option_type: Callable[..., T] | None = None,
     default: T = None,
 ) -> T:
+    """Read a config option value from the supplied config dict
+
+    Args:
+        config (dict): the dict of a config
+        option_name (str): name of the config option, if it is a deprecated name for an existing option a warning is raised
+        option_type (Callable[..., T] | None, optional): The constructor for the type of this option. Defaults to None.
+        default (T, optional): default value returned in case the option does not exist. Defaults to None.
+
+    Returns:
+        T: the value of the option
+    """
     if option_name in config:
         pass
     elif option_name in deprecated_config_strings:

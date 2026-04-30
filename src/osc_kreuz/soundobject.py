@@ -20,6 +20,7 @@ class SoundObjectException(Exception):
     pass
 
 
+# Object representing a single virtual sound object
 class SoundObject(object):
 
     globalConfig: dict = {}
