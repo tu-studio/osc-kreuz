@@ -1,4 +1,4 @@
-# OSC-kreuz architecture
+# System-Architecture
 
 ## Source
 
@@ -36,10 +36,14 @@ The most important handlers are the position handler `osc_handler_position()` an
 
 The OSC-Listeners run as `BlockingOSCUDPServers` in seperate Threads
 
-### what happens when an OSC-Message containing data is received
+### OSC-Message Signalflow
+
+When an OSC data message is received the following happens:
 
 The `BlockingOSCUDPServers` running on this port calls the OSC handler function of this OSC path using the osc_data_dispatcher.
+
 Lets assume we received positional data, then `osc_handler_position` is called. After validation of the source id, the SoundObject with this source_index is updated using the setPosition() function. If the position was actually changed afterwards the osc_handler calls the function `OSCComCenter.notifyRenderClientsForUpdate` with the name of the update-function used by the BaseReceiver, `"sourcePositionChanged"` and the source index.
+
 The `OSCComCenter` then iterates over all receivers, gets the update-function by name using `getattr()` and calls it. If a receiver does not overwrite this function, nothing happens. We'll assume the receiver is a basic `SpatialReceiver`, other Receivers do and should follow the same logic.
 
 From `sourcePositionChanged()`, a PositionUpdate is added to this receivers update queue with correct the source index.
