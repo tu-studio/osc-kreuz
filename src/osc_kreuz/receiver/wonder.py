@@ -148,7 +148,7 @@ class TWonder(Wonder):
 
         self.send_room_information(hostname, port)
 
-        # find a way to do this without multicasting to every connected twonder
+        # TODO find a way to do this without multicasting to every connected twonder
         # self.dump_source_positions()
 
     def add_receiver(self, hostname: str, port: int):
