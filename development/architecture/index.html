@@ -14,8 +14,6 @@
         <link rel="prev" href="../">
       
       
-        <link rel="next" href="../osc-communication/">
-      
       
         
       
@@ -25,7 +23,7 @@
     
     
       
-        <title>OSC-kreuz architecture - OSC-Kreuz Docs</title>
+        <title>System-Architecture - OSC-Kreuz Docs</title>
       
     
     
@@ -78,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#osc-kreuz-architecture" class="md-skip">
+        <a href="#system-architecture" class="md-skip">
           Skip to content
         </a>
       
@@ -113,7 +111,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              OSC-kreuz architecture
+              System-Architecture
             
           </span>
         </div>
@@ -486,7 +484,7 @@
   <span class="md-ellipsis">
     
   
-    OSC-kreuz architecture
+    System-Architecture
   
 
     
@@ -504,7 +502,7 @@
   <span class="md-ellipsis">
     
   
-    OSC-kreuz architecture
+    System-Architecture
   
 
     
@@ -575,10 +573,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#what-happens-when-an-osc-message-containing-data-is-received" class="md-nav__link">
+  <a href="#osc-message-signalflow" class="md-nav__link">
     <span class="md-ellipsis">
       
-        what happens when an OSC-Message containing data is received
+        OSC-Message Signalflow
       
     </span>
   </a>
@@ -594,34 +592,6 @@
   
 </nav>
       
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../osc-communication/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    OSC communication
-  
-
-    
-  </span>
-  
-  
-
-      </a>
     </li>
   
 
@@ -706,10 +676,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#what-happens-when-an-osc-message-containing-data-is-received" class="md-nav__link">
+  <a href="#osc-message-signalflow" class="md-nav__link">
     <span class="md-ellipsis">
       
-        what happens when an OSC-Message containing data is received
+        OSC-Message Signalflow
       
     </span>
   </a>
@@ -741,7 +711,7 @@
   
 
 
-<h1 id="osc-kreuz-architecture">OSC-kreuz architecture</h1>
+<h1 id="system-architecture">System-Architecture</h1>
 <h2 id="source">Source</h2>
 <p>A source describes a virtual sound object that has a position and gains for different systems.</p>
 <h2 id="render-units-vs-receiver">Render Units vs Receiver</h2>
@@ -766,10 +736,11 @@ It stores the following variable information:</p>
 <p>All OSC paths are setup in this class in the <code>setupOscBindings()</code> function. It also contains the osc message handlers.
 The most important handlers are the position handler <code>osc_handler_position()</code> and <code>osc_handler_gain()</code>. They are passed to different osc paths with different preset arguments using the creation of <code>partial</code> functions.</p>
 <p>The OSC-Listeners run as <code>BlockingOSCUDPServers</code> in seperate Threads</p>
-<h3 id="what-happens-when-an-osc-message-containing-data-is-received">what happens when an OSC-Message containing data is received</h3>
-<p>The <code>BlockingOSCUDPServers</code> running on this port calls the OSC handler function of this OSC path using the osc_data_dispatcher.
-Lets assume we received positional data, then <code>osc_handler_position</code> is called. After validation of the source id, the SoundObject with this source_index is updated using the setPosition() function. If the position was actually changed afterwards the osc_handler calls the function <code>OSCComCenter.notifyRenderClientsForUpdate</code> with the name of the update-function used by the BaseReceiver, <code>"sourcePositionChanged"</code> and the source index.
-The <code>OSCComCenter</code> then iterates over all receivers, gets the update-function by name using <code>getattr()</code> and calls it. If a receiver does not overwrite this function, nothing happens. We'll assume the receiver is a basic <code>SpatialReceiver</code>, other Receivers do and should follow the same logic.</p>
+<h3 id="osc-message-signalflow">OSC-Message Signalflow</h3>
+<p>When an OSC data message is received the following happens:</p>
+<p>The <code>BlockingOSCUDPServers</code> running on this port calls the OSC handler function of this OSC path using the osc_data_dispatcher.</p>
+<p>Lets assume we received positional data, then <code>osc_handler_position</code> is called. After validation of the source id, the SoundObject with this source_index is updated using the setPosition() function. If the position was actually changed afterwards the osc_handler calls the function <code>OSCComCenter.notifyRenderClientsForUpdate</code> with the name of the update-function used by the BaseReceiver, <code>"sourcePositionChanged"</code> and the source index.</p>
+<p>The <code>OSCComCenter</code> then iterates over all receivers, gets the update-function by name using <code>getattr()</code> and calls it. If a receiver does not overwrite this function, nothing happens. We'll assume the receiver is a basic <code>SpatialReceiver</code>, other Receivers do and should follow the same logic.</p>
 <p>From <code>sourcePositionChanged()</code>, a PositionUpdate is added to this receivers update queue with correct the source index.
 Notably, the update does not contain the actual positional data, just the information that this receiver should get an update on the specified OSC path.
 The update queue is a <code>Set</code>, making sure each individual PositionUpdate can only exist once per Queue.</p>
@@ -827,22 +798,6 @@ The update queue is a <code>Set</code>, making sure each individual PositionUpda
             </div>
           </a>
         
-        
-          
-          <a href="../osc-communication/" class="md-footer__link md-footer__link--next" aria-label="Next: OSC communication">
-            <div class="md-footer__title">
-              <span class="md-footer__direction">
-                Next
-              </span>
-              <div class="md-ellipsis">
-                OSC communication
-              </div>
-            </div>
-            <div class="md-footer__button md-icon">
-              
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
-            </div>
-          </a>
         
       </nav>
     
