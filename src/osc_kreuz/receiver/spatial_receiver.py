@@ -1,7 +1,8 @@
-from .base_renderer import BaseRenderer
+from .base_receiver import BaseReceiver
 from .updates import PositionUpdate
 
-class SpatialRenderer(BaseRenderer):
+
+class SpatialReceiver(BaseReceiver):
     def sourcePositionChanged(self, source_idx):
         self.add_update(
             source_idx,

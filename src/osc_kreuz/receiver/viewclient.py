@@ -1,8 +1,8 @@
 import logging
 from threading import Timer
 from osc_kreuz.config import read_config_option
-from osc_kreuz.renderer.spatial_renderer import SpatialRenderer
-from osc_kreuz.renderer.updates import (
+from .spatial_receiver import SpatialReceiver
+from .updates import (
     AttributeUpdate,
     DirectSendUpdate,
     GainUpdate,
@@ -10,11 +10,11 @@ from osc_kreuz.renderer.updates import (
 )
 import osc_kreuz.str_keys_conventions as skc
 
-log = logging.getLogger("renderer")
+log = logging.getLogger("receiver")
 verbosity = 0
 
 
-class ViewClient(SpatialRenderer):
+class ViewClient(SpatialReceiver):
     def my_type(self) -> str:
         return f"{super().my_type()}_{self.alias}"
 
@@ -30,10 +30,10 @@ class ViewClient(SpatialRenderer):
             self.indexAsValue = kwargs["indexAsValue"]
 
         # TODO initialize variables only once, and with a consistent type pl0x
-        self.oscpath_position_with_index = [""] * self.numberOfSources
+        self.oscpath_position_with_index = [""] * self.n_sources
         self.oscpath_gain_with_index = [
             ["" for j in range(self.globalConfig["n_renderengines"])]
-            for i in range(self.numberOfSources)
+            for i in range(self.n_sources)
         ]
 
         self.createOscPrefixes()
@@ -49,7 +49,7 @@ class ViewClient(SpatialRenderer):
         self.dump_source_gains()
 
     def createOscPrefixes(self):
-        for i in range(self.numberOfSources):
+        for i in range(self.n_sources):
             self.oscpath_position_with_index[i] = f"/source/{i+1}/{self.posFormat}"
 
             try:

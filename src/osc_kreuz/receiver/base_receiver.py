@@ -10,17 +10,29 @@ from osc_kreuz.soundobject import SoundObject
 
 from .updates import Update, OSCMessage
 
-log = logging.getLogger("renderer")
+log = logging.getLogger("receiver")
 verbosity = 0
 
 
-class RendererException(Exception):
+class ReceiverException(Exception):
     pass
 
 
-class BaseRenderer(object):
+class BaseReceiver(object):
+    """The BaseReceiver from which all Receivers should inherit. The methods for all types of information the receiver needs should be overwritten (
+    sourceAttributeChanged, sourceRenderGainChanged, sourceDirectSendChanged, sourcePositionChanged)
 
-    numberOfSources = 64
+    Attributes:
+        n_sources (int): the number of sources, set as a class variable
+        sources (list[SoundObject]): list of SoundObject, should be changed as a class variable, so all Receivers access the same SoundObjects
+        globalConfig (dict): the global section of the config, set as a class variable
+        debugCopy (bool): if true, all sent OSC messages are also sent to the oscDebugClient, defaults to false
+        oscDebugClient (SimpleUDPClient): OSC receiver for debug messages
+        oscpath_position (str): the OSC path a spatial receiver sends its position to, defaults to /source/{posFormat} if not explicitely set
+
+    """
+
+    n_sources = 64
     sources: list[SoundObject] = []
     globalConfig: dict = {}
     debugCopy: bool = False
@@ -58,16 +70,14 @@ class BaseRenderer(object):
         self.update_interval = int(updateintervall) / 1000
 
         # sets are used in update stack, so each source is updated only once during the update process
-        self.update_stack: list[set[Update]] = [
-            set() for _ in range(self.numberOfSources)
-        ]
+        self.update_queue: list[set[Update]] = [set() for _ in range(self.n_sources)]
         # second update Stack that is swapped in during updates
-        self.update_stack_swap: list[set[Update]] = [
-            set() for _ in range(self.numberOfSources)
+        self.update_queue_swap: list[set[Update]] = [
+            set() for _ in range(self.n_sources)
         ]
 
         self.update_semaphore: list[Semaphore] = [
-            Semaphore() for _ in range(self.numberOfSources)
+            Semaphore() for _ in range(self.n_sources)
         ]
 
         if self.oscpath_position == "":
@@ -84,15 +94,15 @@ class BaseRenderer(object):
                 try:
                     self.add_receiver(host["hostname"], host["port"])
                 except KeyError:
-                    raise RendererException("Invalid Host")
+                    raise ReceiverException("Invalid Host")
 
         if len(self.receivers) == 0:
-            log.warning(f"Renderer of type {self.my_type()} has no receivers")
+            log.warning(f"Receiver of type {self.my_type()} has no receivers")
 
         self.print_self_information()
 
     def print_self_information(self, print_pos_format=True):
-        log.info(f"Initialized renderer {self.my_type()}")
+        log.info(f"Initialized receiver {self.my_type()}")
         hosts_str = ", ".join(
             [f"{hostname}:{receiver._port}" for hostname, receiver in self.receivers]
         )
@@ -134,7 +144,7 @@ class BaseRenderer(object):
             )
 
     def add_update(self, source_idx: int, update: Update) -> None:
-        self.update_stack[source_idx].add(update)
+        self.update_queue[source_idx].add(update)
         self.update_source(source_idx)
 
     def update_source(self, source_idx) -> None:
@@ -147,7 +157,7 @@ class BaseRenderer(object):
         if not self.update_semaphore[source_idx].acquire(blocking=False):
             return
 
-        if len(self.update_stack[source_idx]) == 0:
+        if len(self.update_queue[source_idx]) == 0:
             self.update_semaphore[source_idx].release()
             log.info("didn't need to do anything")
             return
@@ -155,15 +165,15 @@ class BaseRenderer(object):
         time_start = time()
 
         # swap stacks so the stack we are working on isn't written to
-        self.update_stack[source_idx], self.update_stack_swap[source_idx] = (
-            self.update_stack_swap[source_idx],
-            self.update_stack[source_idx],
+        self.update_queue[source_idx], self.update_queue_swap[source_idx] = (
+            self.update_queue_swap[source_idx],
+            self.update_queue[source_idx],
         )
 
         # get messages from updates
         msgs = []
-        while self.update_stack_swap[source_idx]:
-            update: Update = self.update_stack_swap[source_idx].pop()
+        while self.update_queue_swap[source_idx]:
+            update: Update = self.update_queue_swap[source_idx].pop()
             msg = update.to_message()
             msgs.append(msg)
 
@@ -231,7 +241,7 @@ class BaseRenderer(object):
 
     def release_source_update_lock(self, source_idx):
         self.update_semaphore[source_idx].release()
-        if len(self.update_stack[source_idx]) > 0:
+        if len(self.update_queue[source_idx]) > 0:
             self.update_source(source_idx)
 
     # implement these functions in subclasses for registering for specific updates

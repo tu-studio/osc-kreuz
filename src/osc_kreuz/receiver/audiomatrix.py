@@ -5,17 +5,14 @@ from typing import Any
 
 from .updates import GainUpdate, PositionUpdate
 
-from .base_renderer import BaseRenderer
+from .base_receiver import BaseReceiver
 from ..config import read_config_option
 
-log = logging.getLogger("renderer")
+log = logging.getLogger("receiver")
 verbosity = 0
 
 
-
-
-
-class AudioMatrix(BaseRenderer):
+class AudioMatrix(BaseReceiver):
     def __init__(self, paths: Iterable[dict[str, Any]], **kwargs):
         super().__init__(**kwargs)
         self.gain_paths: dict[int, list[str]] = {}

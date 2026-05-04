@@ -41,7 +41,7 @@ deprecated_config_strings = {
     skc.inputport_ui: ["inputport_ui"],
     skc.inputport_data: ["inputport_data"],
     skc.inputport_settings: ["inputport_settings"],
-    "dataformat": ["format"]
+    "dataformat": ["format"],
 }
 
 
@@ -133,23 +133,23 @@ def read_config_option(
 state_suffix = "_state"
 
 
-def add_renderer_to_state_file(renderer: str, hostname: str, port: int):
+def add_receiver_to_state_file(receiver: str, hostname: str, port: int):
     if not state_directory.exists():
         state_directory.mkdir(parents=True)
 
-    renderer_str = f"{hostname};{port}\n"
-    with open(state_directory / f"{renderer}{state_suffix}.csv", "a+") as f:
+    receiver_str = f"{hostname};{port}\n"
+    with open(state_directory / f"{receiver}{state_suffix}.csv", "a+") as f:
         f.seek(0)
         for line in f:
-            if line == renderer_str:
+            if line == receiver_str:
                 break
         else:
-            f.write(renderer_str)
+            f.write(receiver_str)
 
 
-def read_renderer_state_file(renderer: str) -> list[dict]:
+def read_receiver_state_file(receiver: str) -> list[dict]:
     receivers = []
-    filename = state_directory / f"{renderer}{state_suffix}.csv"
+    filename = state_directory / f"{receiver}{state_suffix}.csv"
     if not filename.exists():
         return receivers
     try:
@@ -158,14 +158,14 @@ def read_renderer_state_file(renderer: str) -> list[dict]:
                 hostname, port = line.strip("\n").split(";")
                 receivers.append({"hostname": hostname, "port": int(port)})
     except Exception as e:
-        log.warning(f"exception while reading {renderer} state file: {e}")
+        log.warning(f"exception while reading {receiver} state file: {e}")
 
     return receivers
 
 
-def get_renderers_with_state_file() -> list[str]:
-    renderers = []
+def get_receivers_with_state_file() -> list[str]:
+    receivers = []
 
     for filename in state_directory.glob(f"*{state_suffix}.csv"):
-        renderers.append(filename.stem[: -len(state_suffix)])
-    return renderers
+        receivers.append(filename.stem[: -len(state_suffix)])
+    return receivers

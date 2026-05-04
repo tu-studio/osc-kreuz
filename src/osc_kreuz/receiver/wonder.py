@@ -1,14 +1,14 @@
 import logging
 
 
-from osc_kreuz.config import add_renderer_to_state_file
+from osc_kreuz.config import add_receiver_to_state_file
 import osc_kreuz.str_keys_conventions as skc
 
-from .base_renderer import RendererException
-from .spatial_renderer import SpatialRenderer
+from .base_receiver import ReceiverException
+from .spatial_receiver import SpatialReceiver
 from .updates import AttributeUpdate, PositionUpdate, OSCMessage
 
-log = logging.getLogger("renderer")
+log = logging.getLogger("receiver")
 verbosity = 0
 
 
@@ -18,7 +18,7 @@ class wonderPlanewaveAttributeUpdate(AttributeUpdate):
         return int(not super().get_value())
 
 
-class Wonder(SpatialRenderer):
+class Wonder(SpatialReceiver):
     oscpath_position = "/WONDER/source/position"
     attributeOsc = {
         skc.SourceAttributes.doppler: "/WONDER/source/dopplerEffect",
@@ -136,11 +136,11 @@ class TWonder(Wonder):
             port (int): port of the twonder
 
         Raises:
-            RendererException: raised when the configuration does not allow for proper cwonder replacement
+            ReceiverException: raised when the configuration does not allow for proper cwonder replacement
         """
         # check that osc-kreuz is ready to function as cwonder replacement
         if "room_polygon" not in self.globalConfig:
-            raise RendererException(
+            raise ReceiverException(
                 "Can't connect twonder because no room_polygon was specified in config"
             )
         if not self.is_multicast:
@@ -165,7 +165,7 @@ class TWonder(Wonder):
         ):
             super().add_receiver(hostname, port)
             if not self.is_multicast:
-                add_renderer_to_state_file("twonder", hostname, port)
+                add_receiver_to_state_file("twonder", hostname, port)
 
     def send_room_information(self, hostname: str, port: int):
         """send status information for renderer to twonder
@@ -181,9 +181,9 @@ class TWonder(Wonder):
         msgs = []
 
         # send number of sources
-        msgs.append(OSCMessage(self.oscpath_n_sources, self.numberOfSources))
+        msgs.append(OSCMessage(self.oscpath_n_sources, self.n_sources))
 
         # send activation information
-        for i in range(self.numberOfSources):
+        for i in range(self.n_sources):
             msgs.append(OSCMessage(self.oscpath_activate_source, i))
         self.send_updates(msgs, hostname, port)

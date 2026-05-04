@@ -9,9 +9,9 @@ from pythonosc.dispatcher import Dispatcher
 from pythonosc.osc_server import BlockingOSCUDPServer
 
 from osc_kreuz.coordinates import get_all_coordinate_formats
-from osc_kreuz.renderer.base_renderer import BaseRenderer, RendererException
-from osc_kreuz.renderer.viewclient_renderer import ViewClient
-from osc_kreuz.renderer.wonder_renderer import TWonder
+from osc_kreuz.receiver.base_receiver import BaseReceiver, ReceiverException
+from osc_kreuz.receiver.viewclient import ViewClient
+from osc_kreuz.receiver.wonder import TWonder
 from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc
 
@@ -23,7 +23,7 @@ class OSCComCenter:
     def __init__(
         self,
         soundobjects: list[SoundObject],
-        receivers: list[BaseRenderer],
+        receivers: list[BaseReceiver],
         renderengines: list[str],
         n_sources: int,
         n_direct_sends: int,
@@ -90,7 +90,7 @@ class OSCComCenter:
     def setVerbosity(self, v: int):
         self.verbosity = v
         self.bPrintOSC = v >= 2
-        BaseRenderer.setVerbosity(v)
+        BaseReceiver.setVerbosity(v)
         log.debug(f"verbosity set to {v}")
 
     def setupOscSettingsBindings(self):
@@ -243,7 +243,7 @@ class OSCComCenter:
             else:
                 try:
                     twonder = TWonder(hostname=hostname, port=port, updateintervall=50)
-                except RendererException as e:
+                except ReceiverException as e:
                     log.error(e)
                     return
 
@@ -329,7 +329,7 @@ class OSCComCenter:
                 ip = ipport[0]
                 port = ipport[1]
         else:
-            BaseRenderer.debugCopy = False
+            BaseReceiver.debugCopy = False
             log.info("debug client: invalid message format")
             return
         try:
@@ -342,11 +342,11 @@ class OSCComCenter:
         log.info(f"debug client connected: {ip}:{port}")
 
         if 1023 < osccopy_port < 65535:
-            BaseRenderer.createDebugClient(str(osccopy_ip), osccopy_port)
-            BaseRenderer.debugCopy = True
+            BaseReceiver.createDebugClient(str(osccopy_ip), osccopy_port)
+            BaseReceiver.debugCopy = True
             return
 
-        BaseRenderer.debugCopy = False
+        BaseReceiver.debugCopy = False
 
     def osc_handler_verbose(self, address: str, *args):
         vvvv = -1
@@ -593,15 +593,15 @@ class OSCComCenter:
     def osc_handler_position(
         self, address: str, *args, coord_fmt: str = "xyz", source_index=-1, fromUi=True
     ):
-        args_index = 0
+        args_offset = 0
 
         if source_index == -1:
             try:
-                source_index = int(args[args_index]) - 1
-                args_index += 1
+                source_index = int(args[args_offset]) - 1
+                args_offset += 1
             except ValueError:
                 log.warning(
-                    f"tried to set position invalid source index type: {args[args_index]}"
+                    f"tried to set position invalid source index type: {args[args_offset]}"
                 )
                 return
 
@@ -612,7 +612,7 @@ class OSCComCenter:
             return
 
         if self.soundobjects[source_index].setPosition(
-            coord_fmt, *args[args_index:], fromUi=fromUi
+            coord_fmt, *args[args_offset:], fromUi=fromUi
         ):
             self.notifyRenderClientsForUpdate(
                 "sourcePositionChanged", source_index, fromUi=fromUi
@@ -622,12 +622,12 @@ class OSCComCenter:
         self, address: str, *args, source_index=-1, render_index=-1, fromUi: bool = True
     ):
 
-        args_index = 0
+        args_offset = 0
 
         if source_index == -1:
             try:
-                source_index = int(args[args_index]) - 1
-                args_index += 1
+                source_index = int(args[args_offset]) - 1
+                args_offset += 1
             except ValueError:
                 log.warning(
                     f"Failed to parse source index for message to {address} with args {args}"
@@ -636,8 +636,8 @@ class OSCComCenter:
 
         if render_index == -1:
             try:
-                render_index = int(args[args_index])
-                args_index += 1
+                render_index = int(args[args_offset])
+                args_offset += 1
             except ValueError:
                 log.warning(
                     f"Failed to parse render index for message to {address} with args {args}"
@@ -645,7 +645,7 @@ class OSCComCenter:
                 return
 
         try:
-            gain = float(args[args_index])
+            gain = float(args[args_offset])
         except ValueError:
             log.warning(
                 f"Failed to parse gain for message to {address} with args {args}"
@@ -672,23 +672,23 @@ class OSCComCenter:
         direct_send_index=-1,
         fromUi: bool = True,
     ):
-        args_index = 0
+        args_offset = 0
         if source_index == -1:
             try:
-                source_index = int(args[args_index]) - 1
-                args_index += 1
+                source_index = int(args[args_offset]) - 1
+                args_offset += 1
             except ValueError:
                 return
 
         if direct_send_index == -1:
             try:
-                direct_send_index = int(args[args_index])
-                args_index += 1
+                direct_send_index = int(args[args_offset])
+                args_offset += 1
             except ValueError:
                 return
 
         try:
-            gain = float(args[args_index])
+            gain = float(args[args_offset])
         except ValueError:
             return
 
@@ -716,23 +716,23 @@ class OSCComCenter:
         attribute: skc.SourceAttributes | None = None,
         fromUi: bool = True,
     ):
-        args_index = 0
+        args_offset = 0
         if source_index == -1:
             try:
-                source_index = int(args[args_index]) - 1
-                args_index += 1
+                source_index = int(args[args_offset]) - 1
+                args_offset += 1
             except ValueError:
                 return
 
         if attribute is None:
             try:
-                attribute = skc.SourceAttributes(args[args_index])
-                args_index += 1
+                attribute = skc.SourceAttributes(args[args_offset])
+                args_offset += 1
             except ValueError:
                 return
 
         try:
-            value = float(args[args_index])
+            value = float(args[args_offset])
         except ValueError:
             return
 

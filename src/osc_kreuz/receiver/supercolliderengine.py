@@ -1,6 +1,7 @@
-from .spatial_renderer import SpatialRenderer
+from .spatial_receiver import SpatialReceiver
 
-class SuperColliderEngine(SpatialRenderer):
+
+class SuperColliderEngine(SpatialReceiver):
     oscpath_position = "/source/pos/aed"
 
     def __init__(self, **kwargs):

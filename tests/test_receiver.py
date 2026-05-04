@@ -1,15 +1,15 @@
-from osc_kreuz.renderer.audiomatrix_renderer import AudioMatrix
-from osc_kreuz.renderer.audiorouter_renderer import Audiorouter, AudiorouterWFS
-from osc_kreuz.renderer.updates import (
+from osc_kreuz.receiver.audiomatrix import AudioMatrix
+from osc_kreuz.receiver.audiorouter import Audiorouter, AudiorouterWFS
+from osc_kreuz.receiver.updates import (
     AttributeUpdate,
     DirectSendUpdate,
     GainUpdate,
     PositionUpdate,
     Update,
 )
-from osc_kreuz.renderer.wonder_renderer import wonderPlanewaveAttributeUpdate, Wonder
-from osc_kreuz.renderer.base_renderer import BaseRenderer
-from osc_kreuz.renderer import createRendererClient
+from osc_kreuz.receiver.wonder import wonderPlanewaveAttributeUpdate, Wonder
+from osc_kreuz.receiver.base_receiver import BaseReceiver
+from osc_kreuz.receiver import createReceiverClient
 from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc
 
@@ -80,17 +80,17 @@ def prepare_renderer(conf: dict, disable_network: bool = True):
 
     SoundObject.readGlobalConfig(global_conf)
 
-    BaseRenderer.numberOfSources = 1
-    BaseRenderer.sources = [SoundObject(), SoundObject()]
-    BaseRenderer.globalConfig = global_conf
+    BaseReceiver.n_sources = 1
+    BaseReceiver.sources = [SoundObject(), SoundObject()]
+    BaseReceiver.globalConfig = global_conf
     if disable_network:
-        BaseRenderer.update_source = function_override
-    client = createRendererClient(conf)
+        BaseReceiver.update_source = function_override
+    client = createReceiverClient(conf)
     return client
 
 
 def check_source_update(
-    renderer: BaseRenderer,
+    renderer: BaseReceiver,
     update_type: str,
     source_idx,
     expected_path: list[str] | str,
@@ -101,7 +101,7 @@ def check_source_update(
         expected_path = [expected_path]
         expected_output = [expected_output]
 
-    s = renderer.update_stack[source_idx]
+    s = renderer.update_queue[source_idx]
 
     n_expected = len(expected_path)
     assert len(s) == 0
@@ -133,7 +133,7 @@ def check_source_update(
 def test_wonder_renderer():
     conf = {"type": "Wonder", "hosts": [], "updateintervall": 5}
     c = prepare_renderer(conf)
-    s = c.update_stack[0]
+    s = c.update_queue[0]
     so = c.sources[0]
     assert len(s) == 0
     assert isinstance(c, Wonder)
@@ -170,7 +170,7 @@ def test_audiomatrix_renderer():
         ],
     }
     c = prepare_renderer(conf)
-    s = c.update_stack[0]
+    s = c.update_queue[0]
     so = c.sources[0]
     assert len(s) == 0
     assert isinstance(c, AudioMatrix)
@@ -197,7 +197,7 @@ def test_audiomatrix_renderer():
 def test_audiorouter_renderer():
     conf = {"type": "audiorouter", "hosts": [], "updateintervall": 5}
     c = prepare_renderer(conf)
-    s = c.update_stack[0]
+    s = c.update_queue[0]
     assert len(s) == 0
     assert isinstance(c, Audiorouter)
 
@@ -220,7 +220,7 @@ def test_audiorouter_renderer():
 def test_audiorouterWFS_renderer():
     conf = {"type": "audiorouterWFS", "hosts": [], "updateintervall": 5}
     c = prepare_renderer(conf)
-    s = c.update_stack[0]
+    s = c.update_queue[0]
     assert len(s) == 0
     assert isinstance(c, AudiorouterWFS)
 

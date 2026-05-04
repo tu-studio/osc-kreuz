@@ -1,23 +1,12 @@
 from collections.abc import Iterable
 import logging
 
-from osc_kreuz.renderer.spatial_renderer import SpatialRenderer
-from osc_kreuz.renderer.updates import GainUpdate, PositionUpdate
+from .spatial_receiver import SpatialReceiver
+from .updates import GainUpdate, PositionUpdate
 import osc_kreuz.str_keys_conventions as skc
 
-log = logging.getLogger("renderer")
+log = logging.getLogger("receiver")
 verbosity = 0
-
-
-
-
-
-
-
-
-
-
-
 
 
 # class Oscar(SpatialRenderer):
@@ -109,7 +98,7 @@ verbosity = 0
 #         )
 
 
-class SeamlessPlugin(SpatialRenderer):
+class SeamlessPlugin(SpatialReceiver):
 
     def __init__(self, **kwargs):
         if "dataformat" not in kwargs.keys():

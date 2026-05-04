@@ -1,16 +1,13 @@
 import logging
 
-from .base_renderer import BaseRenderer
+from .base_receiver import BaseReceiver
 from .updates import DirectSendUpdate, GainUpdate
 
-log = logging.getLogger("renderer")
+log = logging.getLogger("receiver")
 verbosity = 0
 
 
-
-
-
-class Audiorouter(BaseRenderer):
+class Audiorouter(BaseReceiver):
     oscpath_gain_renderer = "/source/send/spatial"
     oscpath_gain_reverb = "/source/reverb/gain"
     oscpath_gain_direct = "/source/send/direct"
