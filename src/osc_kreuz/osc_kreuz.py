@@ -11,13 +11,14 @@ import click
 
 from osc_kreuz.config import (
     ConfigError,
-    get_renderers_with_state_file,
+    get_receivers_with_state_file,
     read_config,
     read_config_option,
-    read_renderer_state_file,
+    read_receiver_state_file,
 )
 import osc_kreuz.osccomcenter as osccomcenter
-from osc_kreuz.renderer import BaseRenderer, RendererException, createRendererClient
+from osc_kreuz.receiver.base_receiver import BaseReceiver, ReceiverException
+from osc_kreuz.receiver import createReceiverClient, receiver_name_dict
 from osc_kreuz.soundobject import SoundObject
 import osc_kreuz.str_keys_conventions as skc
 
@@ -61,7 +62,7 @@ def debug_prints(
 
     log.debug("max gain is %s", globalconfig[skc.max_gain])
 
-    if BaseRenderer.debugCopy:
+    if BaseReceiver.debugCopy:
         log.debug("Osc-Messages will be copied to somewhere")
     else:
         log.debug("No Debug client configured")
@@ -134,8 +135,8 @@ def main(
         oscDebugParams = oscdebug.split(":")
         debugIp = oscDebugParams[0]
         debugPort = int(oscDebugParams[1])
-        BaseRenderer.createDebugClient(debugIp, debugPort)
-        BaseRenderer.debugCopy = True
+        BaseReceiver.createDebugClient(debugIp, debugPort)
+        BaseReceiver.debugCopy = True
 
     # read config values
     globalconfig: dict[str, Any] = read_config_option(
@@ -156,7 +157,6 @@ def main(
         port_ui = read_config_option(globalconfig, "port_ui", int, 4455)
     if port_data is None:
         port_data = read_config_option(globalconfig, "port_data", int, 4007)
-
     if port_settings is None:
         port_settings = read_config_option(globalconfig, "port_settings", int, 4999)
 
@@ -166,11 +166,11 @@ def main(
     # set global config in objects
     SoundObject.readGlobalConfig(globalconfig)
     SoundObject.number_renderer = n_renderunits
-    BaseRenderer.globalConfig = globalconfig
+    BaseReceiver.globalConfig = globalconfig
 
     # setup number of sources
 
-    BaseRenderer.numberOfSources = numberofsources
+    BaseReceiver.n_sources = numberofsources
 
     # Data initialisation
     soundobjects: list[SoundObject] = [
@@ -179,9 +179,9 @@ def main(
     ]
 
     # soundobjects are added as a class variable to the render class, so every renderer has access to them
-    BaseRenderer.sources = soundobjects
+    BaseReceiver.sources = soundobjects
 
-    receivers: list[BaseRenderer] = []
+    receivers: list[BaseReceiver] = []
 
     # setting up receivers from config file
     log.info("setting up receivers")
@@ -191,23 +191,30 @@ def main(
                 log.warning("receiver has no type specified, skipping")
                 continue
             try:
-                receivers.append(createRendererClient(receiver_config))
-            except RendererException as e:
+                receivers.append(createReceiverClient(receiver_config))
+            except ReceiverException as e:
                 log.error(e)
                 sys.exit(-1)
 
     # setting up receivers from state file
-    for renderer in get_renderers_with_state_file():
-        log.info(f"setting up renderer {renderer} from last run")
+    for receiver in get_receivers_with_state_file():
+        # check if receiver for this state already exists
+        if any((isinstance(r, receiver_name_dict[receiver]) for r in receivers)):
+            log.warning(
+                "receiver with state from last run already exists, state is thus ignored"
+            )
+            continue
+
+        log.info(f"setting up receiver {receiver} from last run")
         receiver_config = {
-            "type": renderer,
-            "hosts": read_renderer_state_file(renderer),
+            "type": receiver,
+            "hosts": read_receiver_state_file(receiver),
             "updateintervall": 50,  # TODO find a better way to set this default
         }
         try:
-            receivers.append(createRendererClient(receiver_config))
-        except RendererException as e:
-            log.error(f"Can't create renderer {renderer} from state file:")
+            receivers.append(createReceiverClient(receiver_config))
+        except ReceiverException as e:
+            log.error(f"Can't create receiver {receiver} from state file:")
             log.error(e)
 
     # Setup OSC Com center
