@@ -1,6 +1,7 @@
 [Unit]
 Description=osc-kreuz
-After=network.target
+After=user-network-online.service
+Wants=user-network-online.service
 [Install]
 # There is no multi-user.target for a user service, therefore we use default.target
 WantedBy=default.target
