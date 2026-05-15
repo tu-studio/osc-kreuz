@@ -368,10 +368,21 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#audiomatrix" class="md-nav__link">
+  <a href="#receiver-audiomatrix" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Audiomatrix
+        Receiver: audiomatrix
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#receiver-twonder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Receiver: twonder
       
     </span>
   </a>
@@ -480,6 +491,14 @@
   
     
     
+      
+        
+          
+        
+      
+        
+      
+    
     
     
     
@@ -490,8 +509,9 @@
         <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
         
           
-          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
-            
+          <div class="md-nav__link md-nav__container">
+            <a href="../development/" class="md-nav__link ">
+              
   
   
   <span class="md-ellipsis">
@@ -505,8 +525,14 @@
   
   
 
-            <span class="md-nav__icon md-icon"></span>
-          </label>
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
         
         <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_6">
@@ -519,32 +545,6 @@
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../development/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Development
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
               
             
               
@@ -632,10 +632,21 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#audiomatrix" class="md-nav__link">
+  <a href="#receiver-audiomatrix" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Audiomatrix
+        Receiver: audiomatrix
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#receiver-twonder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Receiver: twonder
       
     </span>
   </a>
@@ -749,26 +760,84 @@
 </table>
 <h2 id="receivers">Receivers</h2>
 <p>This Section of the config contains a list of clients that receive updates from osc-kreuz.
-common settings are:
-| Setting | Description | Default |
-| ----------------- | -------------------------------------------------------------------------------------------------------- | ------- |
-| <code>type</code> | Type of the receiver, you should probably use <code>audiomatrix</code> | |
-| <code>hostname</code> | target host, can be a hostname or an ip address, used in conjunction with <code>port</code> | |
-| <code>port</code> | Port of the target host | |
-| <code>hosts</code> | can contain a list of hostnames and ports, allows sending updates to multiple receivers of the same type | |
-| <code>updateintervall</code> | time (in ms) to wait between subsequent update bundles | |
-| <code>dataformat</code> | format the positional data is sent in. supports a lot of different formats | xyz |</p>
-<h3 id="audiomatrix">Audiomatrix</h3>
+common settings are:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>type</code></td>
+<td>Type of the receiver, you should probably use <code>audiomatrix</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>hostname</code></td>
+<td>target host, can be a hostname or an ip address, used in conjunction with <code>port</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>port</code></td>
+<td>Port of the target host</td>
+<td></td>
+</tr>
+<tr>
+<td><code>hosts</code></td>
+<td>can contain a list of hostnames and ports, allows sending updates to multiple receivers of the same type</td>
+<td></td>
+</tr>
+<tr>
+<td><code>updateintervall</code></td>
+<td>time (in ms) to wait between subsequent update bundles</td>
+<td></td>
+</tr>
+<tr>
+<td><code>dataformat</code></td>
+<td>format the positional data is sent in. supports a lot of different formats</td>
+<td>xyz</td>
+</tr>
+</tbody>
+</table>
+<h3 id="receiver-audiomatrix">Receiver: <code>audiomatrix</code></h3>
 <p>This Receiver type is intended for use with the <a href="https://github.com/tu-studio/audio-matrix">Audio Matrix</a>, but can be configured in a flexible way in order to be used for many different receivers.
 what makes it powerful is an additional option, <code>paths</code>, for configuring the osc paths the target listens on.
-<code>paths</code> contains a list of osc paths with the following configuration options:
-| Setting | Description |
-| ---------- | ----------------------------------------------------------------------------------------------- |
-| <code>path</code> | OSC-Path |
-| <code>type</code> | type of data that is sent to this path, options are <code>gain</code> and <code>position</code> |
-| <code>renderer</code> | only used when <code>type</code>=<code>gain</code>, choose renderer whose gain is sent to this path |
-| <code>format</code> | only used when <code>type</code>=<code>position</code>, chooses the datatype of the positional data sent to this path |</p>
+<code>paths</code> contains a list of osc paths with the following configuration options:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td>OSC-Path</td>
+</tr>
+<tr>
+<td><code>type</code></td>
+<td>type of data that is sent to this path, options are <code>gain</code> and <code>position</code></td>
+</tr>
+<tr>
+<td><code>renderer</code></td>
+<td>only used when <code>type</code>=<code>gain</code>, choose renderer whose gain is sent to this path</td>
+</tr>
+<tr>
+<td><code>format</code></td>
+<td>only used when <code>type</code>=<code>position</code>, chooses the datatype of the positional data sent to this path</td>
+</tr>
+</tbody>
+</table>
 <p>Data is sent to clients with the index of the source as the first parameter, followed by the positional or gain data.</p>
+<h3 id="receiver-twonder">Receiver: <code>twonder</code></h3>
+<p>With this Receiver type the OSC-Kreuz can take the role of cwonder as central connection place for rendering WFS using <a href="https://github.com/tu-studio/wonder">twonder</a>. <code>twonder</code> connections can be directly specified using the <code>hosts</code>, however twonders can also connect to the OSC-Kreuz using the <a href="../osc-paths/#subscription-protocol">subscription protocol</a>. Multicast is also supported, this way twonder clients connect once to the OSC-kreuz to get the current positions and the room polygon, all messages following that are supplied to all listening twonders using multicast. Wonder rendering needs information about the room layout in order to allow rendering focused sources within the room, to facilitate this, the <code>room_polygon</code> as well as the <code>room_name</code> global variables have to be set.</p>
+<p>An additional option is added to the settings called <code>multicast</code>, if this is set to true, and the hostname is set to a multicast IP address, the OSC-Kreuz can message the twonders using multicast.</p>
+<p>The <code>updateinterval</code> also translates to the interpolation time used by twonder.</p>
+<p>If multicast is disabled, connected twonders will be saved in files in <code>.local/state/osc-kreuz/</code> to enable reconnection when restarting OSC-Kreuz.</p>
 
 
 
@@ -870,7 +939,7 @@ what makes it powerful is an additional option, <code>paths</code>, for configur
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.footer"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.footer", "navigation.indexes"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
