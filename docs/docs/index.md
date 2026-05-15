@@ -5,7 +5,7 @@ The osc-kreuz serves as a central router for OSC messages in a multiclient spati
 
 # About
 
-The osc-kreuz was originally developed as part of the SeamLess Suite, then named OSC-Router.
+The osc-kreuz was originally developed as part of the [SeamLess Suite](https://tu-studio.github.io/seamless-docs/), then named OSC-Router.
 
 ### Developed and maintained by the TU Studio Team
 - *Fares Schulz*
