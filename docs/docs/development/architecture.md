@@ -56,7 +56,7 @@ The update procedure looks as follows:
 
 1. lock the semaphore for this source index
 2. swap the active update queue with the reserve `update_queue_swap`, so updates received during the update procedure are not lost
-3. pop all updates from the queue, convert them to OSCMessages and add them to a list of
-4. send all updates to all hostnames related to this receiver
-5. schedule the unlocking of the queue
+3. pop all updates from the queue, convert them to OSCMessages and add them to a list of messages
+4. send all messages to all hostnames related to this receiver
+5. schedule the unlocking of the queue using the `update_interval`
 6. after the timeout has passed: release the semaphore, call `update_source` again if any updates arrived in the meantime

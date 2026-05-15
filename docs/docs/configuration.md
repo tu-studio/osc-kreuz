@@ -26,6 +26,7 @@ the `global`-Section of the Config contains general settings:
 
 This Section of the config contains a list of clients that receive updates from osc-kreuz.
 common settings are:
+
 | Setting | Description | Default |
 | ----------------- | -------------------------------------------------------------------------------------------------------- | ------- |
 | `type` | Type of the receiver, you should probably use `audiomatrix` | |
@@ -35,11 +36,12 @@ common settings are:
 | `updateintervall` | time (in ms) to wait between subsequent update bundles | |
 | `dataformat` | format the positional data is sent in. supports a lot of different formats | xyz |
 
-### Audiomatrix
+### Receiver: `audiomatrix`
 
 This Receiver type is intended for use with the [Audio Matrix](https://github.com/tu-studio/audio-matrix), but can be configured in a flexible way in order to be used for many different receivers.
 what makes it powerful is an additional option, `paths`, for configuring the osc paths the target listens on.
 `paths` contains a list of osc paths with the following configuration options:
+
 | Setting | Description |
 | ---------- | ----------------------------------------------------------------------------------------------- |
 | `path` | OSC-Path |
@@ -48,3 +50,13 @@ what makes it powerful is an additional option, `paths`, for configuring the osc
 | `format` | only used when `type`=`position`, chooses the datatype of the positional data sent to this path |
 
 Data is sent to clients with the index of the source as the first parameter, followed by the positional or gain data.
+
+### Receiver: `twonder`
+
+With this Receiver type the OSC-Kreuz can take the role of cwonder as central connection place for rendering WFS using [twonder](https://github.com/tu-studio/wonder). `twonder` connections can be directly specified using the `hosts`, however twonders can also connect to the OSC-Kreuz using the [subscription protocol](./osc-paths.md#subscription-protocol). Multicast is also supported, this way twonder clients connect once to the OSC-kreuz to get the current positions and the room polygon, all messages following that are supplied to all listening twonders using multicast. Wonder rendering needs information about the room layout in order to allow rendering focused sources within the room, to facilitate this, the `room_polygon` as well as the `room_name` global variables have to be set.
+
+An additional option is added to the settings called `multicast`, if this is set to true, and the hostname is set to a multicast IP address, the OSC-Kreuz can message the twonders using multicast.
+
+The `updateinterval` also translates to the interpolation time used by twonder.
+
+If multicast is disabled, connected twonders will be saved in files in `.local/state/osc-kreuz/` to enable reconnection when restarting OSC-Kreuz.

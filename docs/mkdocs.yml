@@ -29,6 +29,7 @@ theme:
         name: Switch to dark mode
   features:
     - navigation.footer
+    - navigation.indexes
 
 extra:
   generator: false
